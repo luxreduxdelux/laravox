@@ -1,0 +1,19 @@
+[package]
+name    = "melodix"
+version = "0.1.0"
+edition = "2024"
+
+[profile.release]
+opt-level     = 3
+codegen-units = 1
+lto           = "fat"
+
+[dependencies]
+#================================================================
+# core.
+#================================================================
+# rune.
+rune         = { version = "0.14.0" }
+rune-modules = { version = "0.14.0" }
+# generic error converter.
+anyhow      = { version = "1.0.98" }
