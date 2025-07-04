@@ -48,22 +48,105 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#![feature(portable_simd)]
+use crate::app::{InputState, State};
 
 //================================================================
 
-use crate::app::App;
+use rune::{Any, Module};
 
 //================================================================
 
-mod app;
-mod audio;
-mod general;
-mod input;
-mod video;
+#[derive(Any)]
+#[rune(item = ::input)]
+struct Board {}
+
+impl Board {
+    fn get_index(state: &State, index: usize) -> anyhow::Result<&InputState> {
+        if let Some(button) = state.frame_state.board.get(index) {
+            Ok(button)
+        } else {
+            Err(anyhow::Error::msg(format!(
+                "Board(): Invalid index for board button: {index}"
+            )))
+        }
+    }
+
+    #[rune::function(path = Self::up)]
+    fn up(state: &State, index: usize) -> anyhow::Result<bool> {
+        Ok(Self::get_index(state, index)?.up)
+    }
+
+    #[rune::function(path = Self::down)]
+    fn down(state: &State, index: usize) -> anyhow::Result<bool> {
+        Ok(!Self::get_index(state, index)?.up)
+    }
+
+    #[rune::function(path = Self::press)]
+    fn press(state: &State, index: usize) -> anyhow::Result<bool> {
+        Ok(Self::get_index(state, index)?.press)
+    }
+
+    #[rune::function(path = Self::release)]
+    fn release(state: &State, index: usize) -> anyhow::Result<bool> {
+        Ok(Self::get_index(state, index)?.release)
+    }
+}
 
 //================================================================
 
-fn main() -> anyhow::Result<()> {
-    App::run()
+#[derive(Any)]
+#[rune(item = ::input)]
+struct Mouse {}
+
+impl Mouse {
+    fn get_index(state: &State, index: usize) -> anyhow::Result<&InputState> {
+        if let Some(button) = state.frame_state.mouse.get(index) {
+            Ok(button)
+        } else {
+            Err(anyhow::Error::msg(format!(
+                "Mouse(): Invalid index for mouse button: {index}"
+            )))
+        }
+    }
+
+    #[rune::function(path = Self::up)]
+    fn up(state: &State, index: usize) -> anyhow::Result<bool> {
+        Ok(Self::get_index(state, index)?.up)
+    }
+
+    #[rune::function(path = Self::down)]
+    fn down(state: &State, index: usize) -> anyhow::Result<bool> {
+        Ok(!Self::get_index(state, index)?.up)
+    }
+
+    #[rune::function(path = Self::press)]
+    fn press(state: &State, index: usize) -> anyhow::Result<bool> {
+        Ok(Self::get_index(state, index)?.press)
+    }
+
+    #[rune::function(path = Self::release)]
+    fn release(state: &State, index: usize) -> anyhow::Result<bool> {
+        Ok(Self::get_index(state, index)?.release)
+    }
+}
+
+//================================================================
+
+#[rune::module(::input)]
+pub fn module() -> anyhow::Result<Module> {
+    let mut module = Module::from_meta(self::module_meta)?;
+
+    module.ty::<Board>()?;
+    module.function_meta(Board::up)?;
+    module.function_meta(Board::down)?;
+    module.function_meta(Board::press)?;
+    module.function_meta(Board::release)?;
+
+    module.ty::<Mouse>()?;
+    module.function_meta(Mouse::up)?;
+    module.function_meta(Mouse::down)?;
+    module.function_meta(Mouse::press)?;
+    module.function_meta(Mouse::release)?;
+
+    Ok(module)
 }

@@ -48,22 +48,64 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#![feature(portable_simd)]
+use crate::app::State;
 
 //================================================================
 
-use crate::app::App;
+use rodio::Sink;
+use rune::{Any, Module};
+use std::sync::Arc;
 
 //================================================================
 
-mod app;
-mod audio;
-mod general;
-mod input;
-mod video;
+#[derive(Any)]
+#[rune(item = ::audio)]
+struct Sound {
+    data: SoundData,
+    sink: Sink,
+}
+
+impl Sound {
+    #[rune::function(path = Self::new)]
+    fn new(state: &State, path: &str) -> anyhow::Result<Self> {
+        let data = std::fs::read(path)?;
+        let sink = rodio::Sink::try_new(&state.audio_entry)?;
+
+        Ok(Self {
+            data: SoundData(Arc::new(data)),
+            sink,
+        })
+    }
+
+    #[rune::function]
+    fn play(&mut self) -> anyhow::Result<()> {
+        let data = std::io::Cursor::new(SoundData(self.data.0.clone()));
+
+        self.sink.stop();
+        self.sink.append(rodio::Decoder::new(data)?);
+        self.sink.play();
+
+        Ok(())
+    }
+}
+
+struct SoundData(Arc<Vec<u8>>);
+
+impl AsRef<[u8]> for SoundData {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
 
 //================================================================
 
-fn main() -> anyhow::Result<()> {
-    App::run()
+#[rune::module(::audio)]
+pub fn module() -> anyhow::Result<Module> {
+    let mut module = Module::from_meta(self::module_meta)?;
+
+    module.ty::<Sound>()?;
+    module.function_meta(Sound::new)?;
+    module.function_meta(Sound::play)?;
+
+    Ok(module)
 }

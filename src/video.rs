@@ -48,22 +48,116 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#![feature(portable_simd)]
+use crate::{
+    app::State,
+    general::{Box2, Vector2},
+};
 
 //================================================================
 
-use crate::app::App;
+use rune::{Any, Module};
+use three_d::{ClearState, ColorMaterial, Gm, Rectangle};
 
 //================================================================
 
-mod app;
-mod audio;
-mod general;
-mod input;
-mod video;
+#[derive(Any)]
+#[rune(item = ::video)]
+struct Frame {}
+
+impl Frame {
+    #[rune::function(path = Self::clear)]
+    fn clear(state: &State) {
+        state
+            .frame_input
+            .screen()
+            .clear(ClearState::color_and_depth(0.5, 0.5, 0.5, 1.0, 1.0));
+    }
+}
 
 //================================================================
 
-fn main() -> anyhow::Result<()> {
-    App::run()
+#[derive(Any)]
+#[allow(dead_code)]
+#[rune(item = ::video)]
+struct Camera(three_d::Camera);
+
+impl Camera {
+    #[rune::function(path = Self::new)]
+    fn new(state: &State) -> Self {
+        let mut camera = three_d::Camera::new_2d(state.frame_input.viewport);
+        camera.disable_tone_and_color_mapping();
+
+        Self(camera)
+    }
+}
+
+//================================================================
+
+#[derive(Any)]
+#[rune(item = ::video)]
+struct Image {
+    #[allow(dead_code)]
+    data: Gm<Rectangle, ColorMaterial>,
+}
+
+impl Image {
+    #[rune::function(path = Self::new)]
+    fn new(state: &State, path: &str) -> anyhow::Result<Self> {
+        use three_d::*;
+
+        let mut texture = three_d_asset::io::load(&[path])?;
+        let texture = Texture2D::new(&state.frame_input.context, &texture.deserialize("")?);
+        let texture = ColorMaterial {
+            texture: Some(Texture2DRef::from_texture(texture)),
+            ..Default::default()
+        };
+
+        let data = Gm::new(
+            Rectangle::new(
+                &state.frame_input.context,
+                vec2(192.0, 192.0),
+                degrees(0.0),
+                128.0,
+                128.0,
+            ),
+            texture,
+        );
+
+        Ok(Self { data })
+    }
+
+    #[rune::function]
+    fn draw(&mut self, camera: &Camera, _box: &Box2) {
+        use three_d::*;
+
+        self.data
+            .geometry
+            .set_center(vec2(_box.point.x, _box.point.y));
+        self.data.render(&camera.0, &[]);
+    }
+
+    #[rune::function]
+    fn test(&mut self, function: rune::runtime::Function) -> anyhow::Result<()> {
+        Ok(function.call::<()>((1,)).into_result()?)
+    }
+}
+
+//================================================================
+
+#[rune::module(::video)]
+pub fn module() -> anyhow::Result<Module> {
+    let mut module = Module::from_meta(self::module_meta)?;
+
+    module.ty::<Frame>()?;
+    module.function_meta(Frame::clear)?;
+
+    module.ty::<Camera>()?;
+    module.function_meta(Camera::new)?;
+
+    module.ty::<Image>()?;
+    module.function_meta(Image::new)?;
+    module.function_meta(Image::draw)?;
+    module.function_meta(Image::test)?;
+
+    Ok(module)
 }
