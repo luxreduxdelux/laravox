@@ -50,13 +50,13 @@
 
 use crate::{
     app::State,
-    general::{Box2, Vector2},
+    general::{Box2, Color, Vector2},
 };
 
 //================================================================
 
-use rune::{Any, Module};
-use three_d::{ClearState, ColorMaterial, Gm, Rectangle};
+use rune::{Any, Module, alloc::HashMap};
+use three_d::{ClearState, ColorMaterial, ColorTarget, CpuTexture, Gm, Rectangle, RenderTarget};
 
 //================================================================
 
@@ -108,17 +108,23 @@ impl Image {
         let mut texture = three_d_asset::io::load(&[path])?;
         let texture = Texture2D::new(&state.frame_input.context, &texture.deserialize("")?);
         let texture = ColorMaterial {
-            texture: Some(Texture2DRef::from_texture(texture)),
+            is_transparent: true,
+            render_states: RenderStates {
+                write_mask: WriteMask::COLOR,
+                blend: Blend::TRANSPARENCY,
+                ..Default::default()
+            },
+            texture: Some(texture.into()),
             ..Default::default()
         };
 
         let data = Gm::new(
             Rectangle::new(
                 &state.frame_input.context,
-                vec2(192.0, 192.0),
+                vec2(0.0, 9.0),
                 degrees(0.0),
-                128.0,
-                128.0,
+                0.0,
+                0.0,
             ),
             texture,
         );
@@ -127,18 +133,184 @@ impl Image {
     }
 
     #[rune::function]
-    fn draw(&mut self, camera: &Camera, _box: &Box2) {
+    fn draw(&mut self, camera: &Camera, _box: &Box2, color: Color) {
         use three_d::*;
 
         self.data
             .geometry
             .set_center(vec2(_box.point.x, _box.point.y));
+        self.data.geometry.set_size(_box.scale.x, _box.scale.y);
+        self.data.geometry.set_rotation(degrees(_box.angle));
+
+        self.data.material.color = color.into();
+
         self.data.render(&camera.0, &[]);
+    }
+}
+
+//================================================================
+
+struct Glyph {
+    shift: f32,
+    point: (f32, f32),
+    scale: (f32, f32),
+    push: (f32, f32),
+}
+
+impl Glyph {
+    fn new(shift: f32, point: (f32, f32), scale: (f32, f32), push: (f32, f32)) -> Self {
+        Self {
+            shift,
+            point,
+            scale,
+            push,
+        }
+    }
+}
+
+#[derive(Any)]
+#[rune(item = ::video)]
+struct Font {
+    #[allow(dead_code)]
+    map: HashMap<char, Glyph>,
+    data: Gm<Rectangle, ColorMaterial>,
+}
+
+impl Font {
+    #[rune::function(path = Self::new)]
+    fn new(state: &State, path: &str, scale: f32) -> anyhow::Result<Self> {
+        let font = std::fs::read(path)?;
+        let font = fontdue::Font::from_bytes(font, fontdue::FontSettings::default()).unwrap();
+        //let mut layout =
+        //    fontdue::layout::Layout::new(fontdue::layout::CoordinateSystem::PositiveYUp);
+        //layout.append(
+        //    &[font],
+        //    &fontdue::layout::TextStyle::new("ABCDEFGHIJKLMNOP", 32.0, 0),
+        //);
+
+        let mut data = Vec::new();
+        let mut size = (0, 0);
+
+        let mut map = HashMap::new();
+
+        for x in 32..127 {
+            let character = x as u8 as char;
+            let (metric, raster) = font.rasterize(character, scale);
+
+            let mut buffer = vec![[0_u8, 0_u8, 0_u8, 0_u8]; metric.width * metric.height];
+
+            for (i, pixel) in raster.iter().enumerate() {
+                buffer[i] = [*pixel, *pixel, *pixel, *pixel];
+            }
+
+            map.try_insert(
+                character,
+                Glyph::new(
+                    size.0 as f32,
+                    (0.0, metric.ymin as f32),
+                    (metric.width as f32, metric.height as f32),
+                    (metric.advance_width as f32, metric.advance_height as f32),
+                ),
+            )
+            .unwrap();
+
+            size.0 += metric.width;
+            size.1 = size.1.max(metric.height);
+
+            data.push((metric, buffer));
+        }
+
+        let mut buffer = vec![[0_u8, 0_u8, 0_u8, 0_u8]; size.0 * size.1];
+        let mut push = 0;
+
+        for (metric, raster) in data {
+            for y in 0..metric.height {
+                let dst_start = y * size.0 + push;
+                let src_start = y * metric.width;
+
+                buffer[dst_start..dst_start + metric.width]
+                    .copy_from_slice(&raster[src_start..src_start + metric.width]);
+            }
+
+            push += metric.width;
+        }
+
+        use three_d::*;
+
+        let texture = CpuTexture {
+            data: TextureData::RgbaU8(buffer),
+            width: size.0 as u32,
+            height: size.1 as u32,
+            min_filter: Interpolation::Nearest,
+            mag_filter: Interpolation::Nearest,
+            ..Default::default()
+        };
+
+        let texture = ColorMaterial {
+            is_transparent: true,
+            render_states: RenderStates {
+                write_mask: WriteMask::COLOR,
+                blend: Blend::TRANSPARENCY,
+                ..Default::default()
+            },
+            texture: Some(Texture2DRef::from_cpu_texture(
+                &state.frame_input.context,
+                &texture,
+            )),
+            ..Default::default()
+        };
+
+        let data = Gm::new(
+            Rectangle::new(
+                &state.frame_input.context,
+                vec2(0.0, size.1 as f32 * 4.0),
+                degrees(0.0),
+                size.0 as f32 * 4.0,
+                size.1 as f32 * 4.0,
+            ),
+            texture,
+        );
+
+        Ok(Self { map, data })
     }
 
     #[rune::function]
-    fn test(&mut self, function: rune::runtime::Function) -> anyhow::Result<()> {
-        Ok(function.call::<()>((1,)).into_result()?)
+    #[rustfmt::skip]
+    fn draw(&mut self, camera: &Camera, point: Vector2, scale: f32, text: String) {
+        use three_d::*;
+
+        let mut push = 0.0;
+
+        for character in text.chars() {
+            if let Some(glyph) = self.map.get(&character) {
+                self.data.geometry.set_size(glyph.scale.0 * scale, glyph.scale.1 * scale);
+                self.data.geometry.set_center(vec2(
+                    point.x + (glyph.scale.0 * scale * 0.5) + push,
+                    point.y + (glyph.scale.1 * scale * 0.5) + glyph.point.1
+                ));
+
+                let texture = self.data.material.texture.as_mut().unwrap();
+                let texture_size = vec2(
+                    texture.texture.width() as f32,
+                    texture.texture.height() as f32,
+                );
+
+                let m_point = Mat3::from_translation(vec2(
+                    glyph.shift / texture_size.x,
+                    (texture_size.y - glyph.scale.1) / texture_size.y,
+                ));
+                let m_scale = Mat3::from_nonuniform_scale(
+                    glyph.scale.0 / texture_size.x,
+                    glyph.scale.1 / texture_size.y
+                );
+
+                texture.transformation = m_point * m_scale;
+
+                push += glyph.push.0 * scale;
+
+                self.data.render(&camera.0, &[]);
+            }
+        }
     }
 }
 
@@ -157,7 +329,10 @@ pub fn module() -> anyhow::Result<Module> {
     module.ty::<Image>()?;
     module.function_meta(Image::new)?;
     module.function_meta(Image::draw)?;
-    module.function_meta(Image::test)?;
+
+    module.ty::<Font>()?;
+    module.function_meta(Font::new)?;
+    module.function_meta(Font::draw)?;
 
     Ok(module)
 }

@@ -48,10 +48,6 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#![feature(portable_simd)]
-
-//================================================================
-
 use crate::app::App;
 
 //================================================================

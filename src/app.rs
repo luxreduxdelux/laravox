@@ -50,7 +50,7 @@
 
 use crate::general::Vector2;
 use rune::{
-    Any, Diagnostics, Module, Source, Sources, Value, Vm,
+    Any, Diagnostics, FromValue, Module, Source, Sources, Value, Vm,
     runtime::Function,
     termcolor::{ColorChoice, StandardStream},
 };
@@ -122,13 +122,15 @@ impl App {
         let window: Window = rune::from_value(entry.window.call::<Value>(()).into_result()?)?;
 
         Ok(three_d::Window::new(three_d::WindowSettings {
-            title: window.title,
-            max_size: Some((window.scale.x as u32, window.scale.y as u32)),
+            title: window.title.unwrap_or("Laravox".to_string()),
+            min_size: window.min_scale.unwrap_or((640, 480)),
+            max_size: window.max_scale,
+            initial_size: window.scale,
+            borderless: window.full.unwrap_or(false),
             surface_settings: SurfaceSettings {
-                vsync: false,
+                vsync: true,
                 ..Default::default()
             },
-            ..Default::default()
         })?)
     }
 
@@ -145,8 +147,8 @@ impl App {
     pub fn run() -> anyhow::Result<()> {
         let (_stream, handle) = rodio::OutputStream::try_default()?;
 
-        let (source, mut script) = Self::load_script()?;
-        let entry = Entry::new(&mut script)?;
+        let (mut source, mut script) = Self::load_script()?;
+        let mut entry = Entry::new(&mut script)?;
         let window = Self::load_window(&entry)?;
         let mut frame_state = FrameState::new();
         let mut value = None;
@@ -161,15 +163,15 @@ impl App {
 
             frame_state.process(&frame_input.events);
 
-            println!("{}", 1.0 / (frame_input.elapsed_time / 1000.0));
+            //println!("{}", 1.0 / (frame_input.elapsed_time / 1000.0));
 
-            let state = State::new(frame_input, frame_state, handle.clone());
+            let state = State::new(frame_input.clone(), frame_state, handle.clone());
 
-            let call = entry.frame.call::<bool>((v, &state)).into_result();
+            let call = entry.frame.call::<usize>((v, &state)).into_result();
 
             match call {
-                Ok(exit) => {
-                    if exit {
+                Ok(code) => {
+                    if code == 0 {
                         entry.close.call::<()>((v, &state)).into_result().unwrap();
 
                         three_d::FrameOutput {
@@ -177,6 +179,20 @@ impl App {
                             swap_buffers: false,
                             wait_next_event: false,
                         }
+                    } else if code == 1 {
+                        entry.close.call::<()>((v, &state)).into_result().unwrap();
+
+                        let (c_source, mut c_script) = Self::load_script().unwrap();
+                        let c_entry = Entry::new(&mut c_script).unwrap();
+
+                        source = c_source;
+                        entry = c_entry;
+
+                        value = Some(
+                            Self::load_value(&entry, frame_input.clone(), handle.clone()).unwrap(),
+                        );
+
+                        three_d::FrameOutput::default()
                     } else {
                         three_d::FrameOutput::default()
                     }
@@ -317,6 +333,9 @@ impl Entry {
 #[derive(Any)]
 #[rune(constructor)]
 pub struct Window {
-    pub title: String,
-    pub scale: Vector2,
+    pub title: Option<String>,
+    pub min_scale: Option<(u32, u32)>,
+    pub max_scale: Option<(u32, u32)>,
+    pub scale: Option<(u32, u32)>,
+    pub full: Option<bool>,
 }

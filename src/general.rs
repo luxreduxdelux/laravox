@@ -54,6 +54,7 @@ use rune::{
     runtime::{Formatter, VmResult},
     vm_write,
 };
+use three_d::Srgba;
 
 //================================================================
 
@@ -154,12 +155,18 @@ pub struct Box2 {
     pub point: Vector2,
     #[rune(get, set)]
     pub scale: Vector2,
+    #[rune(get, set)]
+    pub angle: f32,
 }
 
 impl Box2 {
     #[rune::function(path = Self::new)]
-    fn new(point: Vector2, scale: Vector2) -> Self {
-        Self { point, scale }
+    fn new(point: Vector2, scale: Vector2, angle: f32) -> Self {
+        Self {
+            point,
+            scale,
+            angle,
+        }
     }
 
     #[rune::function(protocol = DISPLAY_FMT)]
@@ -194,6 +201,26 @@ impl Color {
         Self { r, g, b, a }
     }
 
+    #[rune::function(path = Self::white)]
+    fn white() -> Self {
+        Self {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 255,
+        }
+    }
+
+    #[rune::function(path = Self::black)]
+    fn black() -> Self {
+        Self {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        }
+    }
+
     #[rune::function(protocol = DISPLAY_FMT)]
     fn format(&self, formatter: &mut Formatter) -> VmResult<()> {
         vm_write!(formatter, "{:?}", self)
@@ -202,6 +229,17 @@ impl Color {
     #[rune::function(protocol = DEBUG_FMT)]
     fn format_debug(&self, formatter: &mut Formatter) -> VmResult<()> {
         vm_write!(formatter, "{:?}", self)
+    }
+}
+
+impl From<Color> for Srgba {
+    fn from(value: Color) -> Self {
+        Self {
+            r: value.r,
+            g: value.g,
+            b: value.b,
+            a: value.a,
+        }
     }
 }
 
@@ -235,6 +273,8 @@ pub fn module() -> anyhow::Result<Module> {
     module.function_meta(Color::new)?;
     module.function_meta(Color::format)?;
     module.function_meta(Color::format_debug)?;
+    module.function_meta(Color::white)?;
+    module.function_meta(Color::black)?;
 
     Ok(module)
 }
