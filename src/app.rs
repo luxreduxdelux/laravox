@@ -48,9 +48,9 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-use crate::general::Vector2;
+use libloading::{Library, Symbol};
 use rune::{
-    Any, Diagnostics, FromValue, Module, Source, Sources, Value, Vm,
+    Any, Diagnostics, Module, Source, Sources, Value, Vm,
     runtime::Function,
     termcolor::{ColorChoice, StandardStream},
 };
@@ -62,12 +62,12 @@ use three_d::{Event, SurfaceSettings};
 pub struct App {}
 
 impl App {
-    fn load_script() -> anyhow::Result<(Sources, Vm)> {
-        println!("");
+    fn load_script() -> anyhow::Result<(Vec<Library>, Sources, Vm)> {
+        println!();
         println!("//================================================================");
         println!("//  Laravox (1.0.0)");
         println!("//================================================================");
-        println!("");
+        println!();
 
         let mut module = Module::new();
         module.ty::<Entry>()?;
@@ -75,6 +75,21 @@ impl App {
 
         // install each module into the Rune context.
         let mut context = rune_modules::default_context()?;
+
+        let library_list = Vec::new();
+
+        /*
+        unsafe {
+            let library = Library::new("/home/think/laravox/librune_library.so").unwrap();
+            let get_module: Symbol<fn() -> Module> = library.get(b"module").unwrap();
+
+            let result = get_module();
+
+            context.install(result)?;
+
+            library_list.push(library);
+        }
+        */
 
         context.install(module)?;
         context.install(crate::video::module()?)?;
@@ -84,20 +99,9 @@ impl App {
 
         let runtime = Arc::new(context.runtime()?);
 
-        let mut sources = rune::sources! {
-         entry => {
-                pub fn main() {
-                    Entry {
-                        window: Main::window,
-                        begin:  Main::begin,
-                        close:  Main::close,
-                        frame:  Main::frame
-                    }
-                }
-            }
-        };
+        let mut sources = Sources::new();
 
-        sources.insert(Source::from_path("test/main.rs")?)?;
+        sources.insert(Source::from_path("script/main.rn")?)?;
 
         let mut diagnostics = Diagnostics::new();
 
@@ -115,7 +119,9 @@ impl App {
         let unit = result?;
         let unit = Arc::new(unit);
 
-        Ok((sources, Vm::new(runtime.clone(), unit.clone())))
+        let vm = Vm::new(runtime.clone(), unit.clone());
+
+        Ok((library_list, sources, vm))
     }
 
     fn load_window(entry: &Entry) -> anyhow::Result<three_d::Window> {
@@ -147,14 +153,14 @@ impl App {
     pub fn run() -> anyhow::Result<()> {
         let (_stream, handle) = rodio::OutputStream::try_default()?;
 
-        let (mut source, mut script) = Self::load_script()?;
+        let (library_list, mut source, mut script) = Self::load_script()?;
         let mut entry = Entry::new(&mut script)?;
         let window = Self::load_window(&entry)?;
         let mut frame_state = FrameState::new();
         let mut value = None;
 
         window.render_loop(move |frame_input| {
-            if frame_input.first_frame {
+            if value.is_none() {
                 value =
                     Some(Self::load_value(&entry, frame_input.clone(), handle.clone()).unwrap());
             }
@@ -182,7 +188,7 @@ impl App {
                     } else if code == 1 {
                         entry.close.call::<()>((v, &state)).into_result().unwrap();
 
-                        let (c_source, mut c_script) = Self::load_script().unwrap();
+                        let (c_library_list, c_source, mut c_script) = Self::load_script().unwrap();
                         let c_entry = Entry::new(&mut c_script).unwrap();
 
                         source = c_source;
@@ -316,15 +322,12 @@ pub struct Entry {
 
 impl Entry {
     fn new(rune: &mut Vm) -> anyhow::Result<Self> {
-        let state_main = rune.execute(["main"], ())?.complete().into_result()?;
-        let state_main: Entry = rune::from_value(state_main)?;
-
-        //rune.context()
-        //    .function(&Hash::type_hash(["Main", "begin"]))
-        //    .unwrap();
-        //println!("{:?}", state_main.begin.type_hash());
-
-        Ok(state_main)
+        Ok(Self {
+            window: rune.lookup_function(["Main", "window"])?,
+            begin: rune.lookup_function(["Main", "begin"])?,
+            close: rune.lookup_function(["Main", "close"])?,
+            frame: rune.lookup_function(["Main", "frame"])?,
+        })
     }
 }
 

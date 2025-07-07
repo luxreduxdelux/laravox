@@ -72,21 +72,25 @@ impl Board {
     }
 
     #[rune::function(path = Self::up)]
+    /// Get the state of a key-board input (up).
     fn up(state: &State, index: usize) -> anyhow::Result<bool> {
         Ok(Self::get_index(state, index)?.up)
     }
 
     #[rune::function(path = Self::down)]
+    /// Get the state of a key-board input (down).
     fn down(state: &State, index: usize) -> anyhow::Result<bool> {
         Ok(!Self::get_index(state, index)?.up)
     }
 
     #[rune::function(path = Self::press)]
+    /// Get the state of a key-board input (press).
     fn press(state: &State, index: usize) -> anyhow::Result<bool> {
         Ok(Self::get_index(state, index)?.press)
     }
 
     #[rune::function(path = Self::release)]
+    /// Get the state of a key-board input (release).
     fn release(state: &State, index: usize) -> anyhow::Result<bool> {
         Ok(Self::get_index(state, index)?.release)
     }
@@ -110,21 +114,25 @@ impl Mouse {
     }
 
     #[rune::function(path = Self::up)]
+    /// Get the state of a mouse input (up).
     fn up(state: &State, index: usize) -> anyhow::Result<bool> {
         Ok(Self::get_index(state, index)?.up)
     }
 
     #[rune::function(path = Self::down)]
+    /// Get the state of a mouse input (down).
     fn down(state: &State, index: usize) -> anyhow::Result<bool> {
         Ok(!Self::get_index(state, index)?.up)
     }
 
     #[rune::function(path = Self::press)]
+    /// Get the state of a mouse input (press).
     fn press(state: &State, index: usize) -> anyhow::Result<bool> {
         Ok(Self::get_index(state, index)?.press)
     }
 
     #[rune::function(path = Self::release)]
+    /// Get the state of a mouse input (release).
     fn release(state: &State, index: usize) -> anyhow::Result<bool> {
         Ok(Self::get_index(state, index)?.release)
     }

@@ -58,7 +58,7 @@ use three_d::Srgba;
 
 //================================================================
 
-#[derive(Any, TryClone, Debug)]
+#[derive(Any, TryClone, Clone, Debug)]
 #[rune(item = ::general)]
 pub struct Vector2 {
     #[rune(get, set)]
@@ -148,7 +148,7 @@ impl Vector2 {
 
 //================================================================
 
-#[derive(Any, Debug)]
+#[derive(Any, TryClone, Clone, Debug)]
 #[rune(item = ::general)]
 pub struct Box2 {
     #[rune(get, set)]
@@ -182,7 +182,7 @@ impl Box2 {
 
 //================================================================
 
-#[derive(Any, Debug)]
+#[derive(Any, TryClone, Clone, Debug)]
 #[rune(item = ::general)]
 pub struct Color {
     #[rune(get, set)]

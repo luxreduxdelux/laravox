@@ -55,7 +55,7 @@ use crate::{
 
 //================================================================
 
-use rune::{Any, Module, alloc::HashMap};
+use rune::{Any, Module, alloc::HashMap, runtime::Function};
 use three_d::{ClearState, ColorMaterial, ColorTarget, CpuTexture, Gm, Rectangle, RenderTarget};
 
 //================================================================
@@ -66,20 +66,26 @@ struct Frame {}
 
 impl Frame {
     #[rune::function(path = Self::clear)]
-    fn clear(state: &State) {
+    fn clear(state: &State, color: &Color) {
         state
             .frame_input
             .screen()
-            .clear(ClearState::color_and_depth(0.5, 0.5, 0.5, 1.0, 1.0));
+            .clear(ClearState::color_and_depth(
+                (color.r / 255) as f32,
+                (color.g / 255) as f32,
+                (color.b / 255) as f32,
+                (color.a / 255) as f32,
+                1.0,
+            ));
     }
 }
 
 //================================================================
 
-#[derive(Any)]
+#[derive(Any, Clone)]
 #[allow(dead_code)]
 #[rune(item = ::video)]
-struct Camera(three_d::Camera);
+struct Camera(three_d::Camera, Vector2);
 
 impl Camera {
     #[rune::function(path = Self::new)]
@@ -87,7 +93,192 @@ impl Camera {
         let mut camera = three_d::Camera::new_2d(state.frame_input.viewport);
         camera.disable_tone_and_color_mapping();
 
-        Self(camera)
+        Self(camera, Vector2 { x: 0.0, y: 0.0 })
+    }
+
+    fn origin(&self, vector: &Vector2) -> Vector2 {
+        Vector2 {
+            x: self.0.viewport().x as f32 + vector.x,
+            //y: vector.y,
+            y: self.0.viewport().height as f32 - vector.y,
+        }
+    }
+
+    fn draw_texture(
+        &self,
+        data: &mut Gm<Rectangle, ColorMaterial>,
+        box_a: &Box2,
+        box_b: &Box2,
+        color: &Color,
+    ) {
+        use three_d::*;
+
+        let mut point = self.origin(&box_a.point);
+        point.x += box_a.scale.x * 0.5;
+        point.y -= box_a.scale.y * 0.5;
+
+        data.geometry.set_center(vec2(point.x, point.y));
+        data.geometry.set_size(box_a.scale.x, box_a.scale.y);
+        data.geometry.set_rotation(degrees(box_a.angle));
+
+        let texture = data.material.texture.as_mut().unwrap();
+        let texture_size = vec2(
+            texture.texture.width() as f32,
+            texture.texture.height() as f32,
+        );
+
+        let m_point = Mat3::from_translation(vec2(
+            box_b.point.x / texture_size.x,
+            (texture_size.y - box_b.point.y) / texture_size.y,
+        ));
+        let m_scale = Mat3::from_nonuniform_scale(
+            box_b.scale.x / texture_size.x,
+            box_b.scale.y / texture_size.y,
+        );
+
+        texture.transformation = m_point * m_scale;
+
+        data.material.color = color.clone().into();
+
+        data.render(&self.0, &[]);
+    }
+}
+
+//================================================================
+
+//================================================================
+
+#[derive(Any)]
+#[rune(item = ::video)]
+struct Render {
+    texture_color: three_d::Texture2D,
+    #[allow(dead_code)]
+    data: Gm<Rectangle, ColorMaterial>,
+    #[rune(get, set)]
+    box_a: Box2,
+    #[rune(get, set)]
+    box_b: Box2,
+    #[rune(get, set)]
+    color: Color,
+}
+
+impl Render {
+    #[rune::function(path = Self::new)]
+    fn new(state: &State, scale: Vector2) -> anyhow::Result<Self> {
+        use three_d::*;
+
+        let texture_color = Texture2D::new_empty::<[u8; 4]>(
+            &state.frame_input.context,
+            scale.x as u32,
+            scale.y as u32,
+            Interpolation::Nearest,
+            Interpolation::Nearest,
+            None,
+            Wrapping::ClampToEdge,
+            Wrapping::ClampToEdge,
+        );
+
+        let texture = Texture2D::new_empty::<[u8; 4]>(
+            &state.frame_input.context,
+            scale.x as u32,
+            scale.y as u32,
+            Interpolation::Nearest,
+            Interpolation::Nearest,
+            None,
+            Wrapping::ClampToEdge,
+            Wrapping::ClampToEdge,
+        );
+        let texture = ColorMaterial {
+            is_transparent: true,
+            render_states: RenderStates {
+                write_mask: WriteMask::COLOR,
+                blend: Blend::TRANSPARENCY,
+                ..Default::default()
+            },
+            texture: Some(texture.into()),
+            ..Default::default()
+        };
+
+        let data = Gm::new(
+            Rectangle::new(
+                &state.frame_input.context,
+                vec2(0.0, 0.0),
+                degrees(0.0),
+                0.0,
+                0.0,
+            ),
+            texture,
+        );
+
+        let t = data.material.texture.as_ref().unwrap();
+        let s = (t.width() as f32, t.height() as f32);
+
+        Ok(Self {
+            texture_color,
+            data,
+            box_a: Box2 {
+                point: crate::general::Vector2 { x: 0.0, y: 0.0 },
+                scale: crate::general::Vector2 { x: s.0, y: s.1 },
+                angle: 0.0,
+            },
+            box_b: Box2 {
+                point: crate::general::Vector2 { x: 0.0, y: 0.0 },
+                scale: crate::general::Vector2 { x: s.0, y: s.1 },
+                angle: 0.0,
+            },
+            color: crate::general::Color {
+                r: 255,
+                g: 255,
+                b: 255,
+                a: 255,
+            },
+        })
+    }
+
+    #[rune::function]
+    fn draw_to(&mut self, state: &State, mut camera: Camera, call: Function) {
+        use three_d::*;
+
+        // this should really only use the material.texture from the
+        // render target, however, DerefMut is not available for
+        // an Arc<Texture2D>, so we can't use it.
+
+        let color = self.texture_color.as_color_target(None);
+
+        let mut view = camera.0.viewport();
+
+        view.y = -(view.height as i32 - color.height() as i32);
+
+        camera.0.set_viewport(view);
+
+        let data = color
+            .clear(ClearState::color_and_depth(0.8, 0.8, 0.8, 1.0, 1.0))
+            .write::<RendererError>(|| {
+                call.call::<()>((camera,)).unwrap();
+                Ok(())
+            })
+            .unwrap()
+            .read();
+
+        let texture = CpuTexture {
+            data: TextureData::RgbaU8(data),
+            width: color.width(),
+            height: color.height(),
+            min_filter: Interpolation::Nearest,
+            mag_filter: Interpolation::Nearest,
+            ..Default::default()
+        };
+
+        self.data.material.texture = Some(Texture2DRef::from_cpu_texture(
+            &state.frame_input.context,
+            &texture,
+        ));
+    }
+
+    #[rune::function]
+    #[inline]
+    fn draw(&mut self, camera: &Camera) {
+        camera.draw_texture(&mut self.data, &self.box_a, &self.box_b, &self.color);
     }
 }
 
@@ -98,6 +289,12 @@ impl Camera {
 struct Image {
     #[allow(dead_code)]
     data: Gm<Rectangle, ColorMaterial>,
+    #[rune(get, set)]
+    box_a: Box2,
+    #[rune(get, set)]
+    box_b: Box2,
+    #[rune(get, set)]
+    color: Color,
 }
 
 impl Image {
@@ -121,7 +318,7 @@ impl Image {
         let data = Gm::new(
             Rectangle::new(
                 &state.frame_input.context,
-                vec2(0.0, 9.0),
+                vec2(0.0, 0.0),
                 degrees(0.0),
                 0.0,
                 0.0,
@@ -129,22 +326,34 @@ impl Image {
             texture,
         );
 
-        Ok(Self { data })
+        let t = data.material.texture.as_ref().unwrap();
+        let s = (t.width() as f32, t.height() as f32);
+
+        Ok(Self {
+            data,
+            box_a: Box2 {
+                point: crate::general::Vector2 { x: 0.0, y: 0.0 },
+                scale: crate::general::Vector2 { x: s.0, y: s.1 },
+                angle: 0.0,
+            },
+            box_b: Box2 {
+                point: crate::general::Vector2 { x: 0.0, y: 0.0 },
+                scale: crate::general::Vector2 { x: s.0, y: s.1 },
+                angle: 0.0,
+            },
+            color: crate::general::Color {
+                r: 255,
+                g: 255,
+                b: 255,
+                a: 255,
+            },
+        })
     }
 
     #[rune::function]
-    fn draw(&mut self, camera: &Camera, _box: &Box2, color: Color) {
-        use three_d::*;
-
-        self.data
-            .geometry
-            .set_center(vec2(_box.point.x, _box.point.y));
-        self.data.geometry.set_size(_box.scale.x, _box.scale.y);
-        self.data.geometry.set_rotation(degrees(_box.angle));
-
-        self.data.material.color = color.into();
-
-        self.data.render(&camera.0, &[]);
+    #[inline]
+    fn draw(&mut self, camera: &Camera) {
+        camera.draw_texture(&mut self.data, &self.box_a, &self.box_b, &self.color);
     }
 }
 
@@ -174,28 +383,29 @@ struct Font {
     #[allow(dead_code)]
     map: HashMap<char, Glyph>,
     data: Gm<Rectangle, ColorMaterial>,
+    scale: f32,
 }
 
 impl Font {
     #[rune::function(path = Self::new)]
     fn new(state: &State, path: &str, scale: f32) -> anyhow::Result<Self> {
+        let code: String = (32..127).map(|x| x as u8 as char).collect();
         let font = std::fs::read(path)?;
         let font = fontdue::Font::from_bytes(font, fontdue::FontSettings::default()).unwrap();
-        //let mut layout =
-        //    fontdue::layout::Layout::new(fontdue::layout::CoordinateSystem::PositiveYUp);
-        //layout.append(
-        //    &[font],
-        //    &fontdue::layout::TextStyle::new("ABCDEFGHIJKLMNOP", 32.0, 0),
-        //);
+        let mut layout =
+            fontdue::layout::Layout::new(fontdue::layout::CoordinateSystem::PositiveYDown);
+        layout.append(
+            std::slice::from_ref(&font),
+            &fontdue::layout::TextStyle::new(&code, scale, 0),
+        );
 
         let mut data = Vec::new();
         let mut size = (0, 0);
 
         let mut map = HashMap::new();
 
-        for x in 32..127 {
-            let character = x as u8 as char;
-            let (metric, raster) = font.rasterize(character, scale);
+        for glyph in layout.glyphs() {
+            let (metric, raster) = font.rasterize(glyph.parent, scale);
 
             let mut buffer = vec![[0_u8, 0_u8, 0_u8, 0_u8]; metric.width * metric.height];
 
@@ -204,18 +414,18 @@ impl Font {
             }
 
             map.try_insert(
-                character,
+                glyph.parent,
                 Glyph::new(
                     size.0 as f32,
-                    (0.0, metric.ymin as f32),
-                    (metric.width as f32, metric.height as f32),
-                    (metric.advance_width as f32, metric.advance_height as f32),
+                    (0.0, glyph.y),
+                    (glyph.width as f32, glyph.height as f32),
+                    (metric.advance_width, metric.advance_height),
                 ),
             )
             .unwrap();
 
-            size.0 += metric.width;
-            size.1 = size.1.max(metric.height);
+            size.0 += glyph.width;
+            size.1 = size.1.max(glyph.height);
 
             data.push((metric, buffer));
         }
@@ -224,12 +434,11 @@ impl Font {
         let mut push = 0;
 
         for (metric, raster) in data {
-            for y in 0..metric.height {
-                let dst_start = y * size.0 + push;
-                let src_start = y * metric.width;
+            for (i, pixel) in raster.iter().enumerate() {
+                let p_x = i % metric.width;
+                let p_y = i / metric.width;
 
-                buffer[dst_start..dst_start + metric.width]
-                    .copy_from_slice(&raster[src_start..src_start + metric.width]);
+                buffer[(push + p_x) + (size.0 * p_y)] = *pixel;
             }
 
             push += metric.width;
@@ -263,31 +472,34 @@ impl Font {
         let data = Gm::new(
             Rectangle::new(
                 &state.frame_input.context,
-                vec2(0.0, size.1 as f32 * 4.0),
+                vec2(0.0, 0.0),
                 degrees(0.0),
-                size.0 as f32 * 4.0,
-                size.1 as f32 * 4.0,
+                0.0,
+                0.0,
             ),
             texture,
         );
 
-        Ok(Self { map, data })
+        Ok(Self { map, data, scale })
     }
 
     #[rune::function]
     #[rustfmt::skip]
-    fn draw(&mut self, camera: &Camera, point: Vector2, scale: f32, text: String) {
+    fn draw(&mut self, camera: &Camera, point: &Vector2, scale: f32, text: String) {
         use three_d::*;
 
         let mut push = 0.0;
 
+        let point = camera.origin(point);
+        let scale = scale / self.scale;
+
         for character in text.chars() {
             if let Some(glyph) = self.map.get(&character) {
-                self.data.geometry.set_size(glyph.scale.0 * scale, glyph.scale.1 * scale);
                 self.data.geometry.set_center(vec2(
-                    point.x + (glyph.scale.0 * scale * 0.5) + push,
-                    point.y + (glyph.scale.1 * scale * 0.5) + glyph.point.1
+                    point.x + glyph.scale.0 * 0.5 + push,
+                    point.y - glyph.scale.1 * 0.5 - glyph.point.1
                 ));
+                self.data.geometry.set_size(glyph.scale.0 * scale, glyph.scale.1 * scale);
 
                 let texture = self.data.material.texture.as_mut().unwrap();
                 let texture_size = vec2(
@@ -325,6 +537,11 @@ pub fn module() -> anyhow::Result<Module> {
 
     module.ty::<Camera>()?;
     module.function_meta(Camera::new)?;
+
+    module.ty::<Render>()?;
+    module.function_meta(Render::new)?;
+    module.function_meta(Render::draw_to)?;
+    module.function_meta(Render::draw)?;
 
     module.ty::<Image>()?;
     module.function_meta(Image::new)?;
