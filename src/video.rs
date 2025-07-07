@@ -52,31 +52,186 @@ use crate::{
     app::State,
     general::{Box2, Color, Vector2},
 };
+use std::sync::Arc;
 
 //================================================================
 
-use rune::{Any, Module, alloc::HashMap, runtime::Function};
+use rune::{Any, Module, Mut, alloc::HashMap, runtime::Function};
 use three_d::{ClearState, ColorMaterial, ColorTarget, CpuTexture, Gm, Rectangle, RenderTarget};
 
 //================================================================
 
 #[derive(Any)]
 #[rune(item = ::video)]
-struct Frame {}
+struct Frame {
+    // active batch texture.
+    texture: Option<Arc<three_d::Texture2D>>,
+
+    // GPU buffer data.
+    main_vertex_point: three_d::VertexBuffer<three_d::Vector2<f32>>,
+    main_texture_point: three_d::VertexBuffer<three_d::Vector2<f32>>,
+    main_texture_color: three_d::VertexBuffer<three_d::Vector4<f32>>,
+
+    // CPU buffer data.
+    side_vertex_point: Vec<three_d::Vector2<f32>>,
+    side_texture_point: Vec<three_d::Vector2<f32>>,
+    side_texture_color: Vec<three_d::Vector4<f32>>,
+
+    // shader program.
+    program: three_d::Program,
+}
 
 impl Frame {
-    #[rune::function(path = Self::clear)]
-    fn clear(state: &State, color: &Color) {
+    const VERTEX_POINT: &str = "vs_vertex_point";
+    const TEXTURE_POINT: &str = "vs_texture_point";
+    const TEXTURE_COLOR: &str = "vs_texture_color";
+    const TEXTURE_SAMPLE: &str = "texture_sample";
+    const VIEW_PROJECTION: &str = "view_projection";
+
+    #[rune::function(path = Self::new)]
+    #[rustfmt::skip]
+    fn new(state: &State) -> Self {
+        use three_d::*;
+
+        // initialize each CPU buffer.
+        let side_vertex_point  = Vec::with_capacity(1024);
+        let side_texture_point = Vec::with_capacity(1024);
+        let side_texture_color = Vec::with_capacity(1024);
+
+        // initialize each GPU buffer.
+        let main_vertex_point  = VertexBuffer::new_with_data(&state.frame_input.context, &side_vertex_point);
+        let main_texture_point = VertexBuffer::new_with_data(&state.frame_input.context, &side_texture_point);
+        let main_texture_color = VertexBuffer::new_with_data(&state.frame_input.context, &side_texture_color);
+
+        let program = Program::from_source(
+            &state.frame_input.context,
+            include_str!("../base.vs"),
+            include_str!("../base.fs"),
+        )
+        .unwrap();
+
+        Self {
+            texture: None,
+            main_vertex_point,
+            main_texture_point,
+            main_texture_color,
+            side_vertex_point,
+            side_texture_point,
+            side_texture_color,
+            program,
+        }
+    }
+
+    #[rune::function]
+    fn draw(&mut self, state: &State, camera: &Camera, render_call: Function) {
+        use three_d::*;
+
         state
             .frame_input
             .screen()
-            .clear(ClearState::color_and_depth(
-                (color.r / 255) as f32,
-                (color.g / 255) as f32,
-                (color.b / 255) as f32,
-                (color.a / 255) as f32,
-                1.0,
-            ));
+            .clear(ClearState::color_and_depth(0.5, 0.5, 0.5, 1.0, 1.0))
+            .write::<CoreError>(|| {
+                // rust, fuck off
+                unsafe {
+                    let raw = self as *mut Frame;
+
+                    render_call.call::<()>((&mut *raw,)).unwrap();
+                }
+
+                self.flush(state, camera);
+
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    fn draw_image(&mut self, image: &Image, box_a: &Box2 /*box_b: &Box2, color: Color*/) {
+        // TO-DO only clone once, when setting a new texture, then re-use thereafter.
+
+        let scale = (image.data.width() as f32, image.data.height() as f32);
+
+        let box_b = Box2 {
+            point: crate::general::Vector2 { x: 0.0, y: 0.0 },
+            scale: crate::general::Vector2 {
+                x: scale.0,
+                y: scale.1,
+            },
+            angle: 0.0,
+        };
+
+        use three_d::*;
+
+        self.texture = Some(image.data.clone());
+
+        let x1 = box_a.point.x;
+        let y1 = box_a.point.y;
+        let x2 = box_a.point.x + box_a.scale.x;
+        let y2 = box_a.point.y + box_a.scale.y;
+
+        let u1 = box_b.point.x / scale.0;
+        let v1 = box_b.point.y / scale.1;
+        let u2 = (box_b.point.x + box_b.scale.x) / scale.0;
+        let v2 = (box_b.point.y + box_b.scale.y) / scale.1;
+
+        let color = vec4(
+            1.0, //color.r as f32 / 255.0,
+            1.0, //color.g as f32 / 255.0,
+            1.0, //color.b as f32 / 255.0,
+            1.0, //color.a as f32 / 255.0,
+        );
+
+        // move data into CPU buffer.
+        self.side_vertex_point.extend([
+            vec2(x1, y1),
+            vec2(x2, y2),
+            vec2(x1, y2),
+            vec2(x1, y1),
+            vec2(x2, y1),
+            vec2(x2, y2),
+        ]);
+        self.side_texture_point.extend([
+            vec2(u1, v1),
+            vec2(u2, v2),
+            vec2(u1, v2),
+            vec2(u1, v1),
+            vec2(u2, v1),
+            vec2(u2, v2),
+        ]);
+        self.side_texture_color
+            .extend([color, color, color, color, color, color]);
+    }
+
+    #[rustfmt::skip]
+    fn flush(&mut self, state: &State, camera: &Camera) {
+        if let Some(self_texture) = &self.texture && !self.side_vertex_point.is_empty() {
+            //println!("flush!");
+
+            use three_d::*;
+
+            // move CPU buffer data to the GPU.
+            self.main_vertex_point.fill(&self.side_vertex_point);
+            self.main_texture_point.fill(&self.side_texture_point);
+            self.main_texture_color.fill(&self.side_texture_color);
+
+            // set every uniform, attribute.
+            self.program.use_uniform(Self::VIEW_PROJECTION, camera.0.projection() * camera.0.view());
+            self.program.use_texture(Self::TEXTURE_SAMPLE, self_texture);
+            self.program.use_vertex_attribute(Self::VERTEX_POINT, &self.main_vertex_point);
+            self.program.use_vertex_attribute(Self::TEXTURE_POINT, &self.main_texture_point);
+            self.program.use_vertex_attribute(Self::TEXTURE_COLOR, &self.main_texture_color);
+
+            // render the batch.
+            self.program.draw_arrays(
+                RenderStates::default(),
+                state.frame_input.viewport,
+                self.main_vertex_point.vertex_count(),
+            );
+
+            // clear CPU buffer.
+            self.side_vertex_point.clear();
+            self.side_texture_point.clear();
+            self.side_texture_color.clear();
+        }
     }
 }
 
@@ -288,13 +443,7 @@ impl Render {
 #[rune(item = ::video)]
 struct Image {
     #[allow(dead_code)]
-    data: Gm<Rectangle, ColorMaterial>,
-    #[rune(get, set)]
-    box_a: Box2,
-    #[rune(get, set)]
-    box_b: Box2,
-    #[rune(get, set)]
-    color: Color,
+    data: Arc<three_d::Texture2D>,
 }
 
 impl Image {
@@ -304,56 +453,18 @@ impl Image {
 
         let mut texture = three_d_asset::io::load(&[path])?;
         let texture = Texture2D::new(&state.frame_input.context, &texture.deserialize("")?);
-        let texture = ColorMaterial {
-            is_transparent: true,
-            render_states: RenderStates {
-                write_mask: WriteMask::COLOR,
-                blend: Blend::TRANSPARENCY,
-                ..Default::default()
-            },
-            texture: Some(texture.into()),
-            ..Default::default()
-        };
-
-        let data = Gm::new(
-            Rectangle::new(
-                &state.frame_input.context,
-                vec2(0.0, 0.0),
-                degrees(0.0),
-                0.0,
-                0.0,
-            ),
-            texture,
-        );
-
-        let t = data.material.texture.as_ref().unwrap();
-        let s = (t.width() as f32, t.height() as f32);
 
         Ok(Self {
-            data,
-            box_a: Box2 {
-                point: crate::general::Vector2 { x: 0.0, y: 0.0 },
-                scale: crate::general::Vector2 { x: s.0, y: s.1 },
-                angle: 0.0,
-            },
-            box_b: Box2 {
-                point: crate::general::Vector2 { x: 0.0, y: 0.0 },
-                scale: crate::general::Vector2 { x: s.0, y: s.1 },
-                angle: 0.0,
-            },
-            color: crate::general::Color {
-                r: 255,
-                g: 255,
-                b: 255,
-                a: 255,
-            },
+            data: Arc::new(texture),
         })
     }
 
     #[rune::function]
     #[inline]
-    fn draw(&mut self, camera: &Camera) {
-        camera.draw_texture(&mut self.data, &self.box_a, &self.box_b, &self.color);
+    fn draw(&mut self, frame: &mut Frame, box_a: &Box2) {
+        frame.draw_image(self, box_a);
+
+        //camera.draw_texture(&mut self.data, &self.box_a, &self.box_b, &self.color);
     }
 }
 
@@ -533,7 +644,8 @@ pub fn module() -> anyhow::Result<Module> {
     let mut module = Module::from_meta(self::module_meta)?;
 
     module.ty::<Frame>()?;
-    module.function_meta(Frame::clear)?;
+    module.function_meta(Frame::new)?;
+    module.function_meta(Frame::draw)?;
 
     module.ty::<Camera>()?;
     module.function_meta(Camera::new)?;

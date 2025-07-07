@@ -51,11 +51,12 @@
 use libloading::{Library, Symbol};
 use rune::{
     Any, Diagnostics, Module, Source, Sources, Value, Vm,
+    alloc::clone::TryClone,
     runtime::Function,
     termcolor::{ColorChoice, StandardStream},
 };
 use std::sync::Arc;
-use three_d::{Event, SurfaceSettings};
+use three_d::{Event, FrameInputGenerator, SurfaceSettings, WindowedContext};
 
 //================================================================
 
@@ -124,9 +125,43 @@ impl App {
         Ok((library_list, sources, vm))
     }
 
-    fn load_window(entry: &Entry) -> anyhow::Result<three_d::Window> {
-        let window: Window = rune::from_value(entry.window.call::<Value>(()).into_result()?)?;
+    fn load_window(
+        vm: &mut Vm,
+        entry: &Entry,
+    ) -> anyhow::Result<(
+        three_d::WindowedContext,
+        winit::event_loop::EventLoop<()>,
+        winit::window::Window,
+    )> {
+        let r_window = entry.window.call::<Window>(()).into_result()?;
 
+        let event_loop = winit::event_loop::EventLoop::new();
+
+        let mut window = winit::window::WindowBuilder::new();
+
+        if let Some(title) = r_window.title {
+            window = window.with_title(title);
+        }
+
+        if let Some(min_scale) = r_window.min_scale {
+            window =
+                window.with_min_inner_size(winit::dpi::LogicalSize::new(min_scale.0, min_scale.1));
+        }
+
+        if let Some(max_scale) = r_window.min_scale {
+            window =
+                window.with_max_inner_size(winit::dpi::LogicalSize::new(max_scale.0, max_scale.1));
+        }
+
+        let window = window.build(&event_loop)?;
+        let surface = SurfaceSettings {
+            vsync: false,
+            ..Default::default()
+        };
+
+        let context = WindowedContext::from_winit_window(&window, surface).unwrap();
+
+        /*
         Ok(three_d::Window::new(three_d::WindowSettings {
             title: window.title.unwrap_or("Laravox".to_string()),
             min_size: window.min_scale.unwrap_or((640, 480)),
@@ -138,6 +173,9 @@ impl App {
                 ..Default::default()
             },
         })?)
+        */
+
+        Ok((context, event_loop, window))
     }
 
     fn load_value(
@@ -151,73 +189,103 @@ impl App {
     }
 
     pub fn run() -> anyhow::Result<()> {
+        // load audio handle.
         let (_stream, handle) = rodio::OutputStream::try_default()?;
 
-        let (library_list, mut source, mut script) = Self::load_script()?;
+        // load script data.
+        let (_, mut source, mut script) = Self::load_script()?;
         let mut entry = Entry::new(&mut script)?;
-        let window = Self::load_window(&entry)?;
+
+        // load window.
+        let (context, event_loop, window) = Self::load_window(&mut script, &entry)?;
+
         let mut frame_state = FrameState::new();
         let mut value = None;
 
-        window.render_loop(move |frame_input| {
-            if value.is_none() {
-                value =
-                    Some(Self::load_value(&entry, frame_input.clone(), handle.clone()).unwrap());
-            }
+        let mut frame_input_generator = FrameInputGenerator::from_winit_window(&window);
 
-            let v = value.as_ref().unwrap();
+        event_loop.run(move |event, _, control_flow| {
+            //frame_state.process(&event);
 
-            frame_state.process(&frame_input.events);
+            match event {
+                winit::event::Event::MainEventsCleared => {
+                    window.request_redraw();
+                }
+                winit::event::Event::RedrawRequested(_) => {
+                    let frame_input = frame_input_generator.generate(&context);
 
-            //println!("{}", 1.0 / (frame_input.elapsed_time / 1000.0));
-
-            let state = State::new(frame_input.clone(), frame_state, handle.clone());
-
-            let call = entry.frame.call::<usize>((v, &state)).into_result();
-
-            match call {
-                Ok(code) => {
-                    if code == 0 {
-                        entry.close.call::<()>((v, &state)).into_result().unwrap();
-
-                        three_d::FrameOutput {
-                            exit: true,
-                            swap_buffers: false,
-                            wait_next_event: false,
-                        }
-                    } else if code == 1 {
-                        entry.close.call::<()>((v, &state)).into_result().unwrap();
-
-                        let (c_library_list, c_source, mut c_script) = Self::load_script().unwrap();
-                        let c_entry = Entry::new(&mut c_script).unwrap();
-
-                        source = c_source;
-                        entry = c_entry;
-
+                    if value.is_none() {
                         value = Some(
                             Self::load_value(&entry, frame_input.clone(), handle.clone()).unwrap(),
                         );
+                    }
 
-                        three_d::FrameOutput::default()
-                    } else {
-                        three_d::FrameOutput::default()
+                    let v = value.as_ref().unwrap();
+
+                    println!("{}", 1.0 / (frame_input.elapsed_time / 1000.0));
+
+                    let state = State::new(frame_input.clone(), frame_state, handle.clone());
+
+                    let call = entry.frame.call::<usize>((v, &state)).into_result();
+
+                    match call {
+                        Ok(code) => {
+                            if code == 0 {
+                                entry.close.call::<()>((v, &state)).into_result().unwrap();
+
+                                control_flow.set_exit();
+                            } else if code == 1 {
+                                entry.close.call::<()>((v, &state)).into_result().unwrap();
+
+                                let (_, c_source, mut c_script) = Self::load_script().unwrap();
+                                let c_entry = Entry::new(&mut c_script).unwrap();
+
+                                source = c_source;
+                                entry = c_entry;
+
+                                value = Some(
+                                    Self::load_value(&entry, frame_input.clone(), handle.clone())
+                                        .unwrap(),
+                                );
+
+                                context.swap_buffers().unwrap();
+                                control_flow.set_poll();
+                                window.request_redraw();
+                            } else {
+                                context.swap_buffers().unwrap();
+                                control_flow.set_poll();
+                                window.request_redraw();
+                            }
+                        }
+                        Err(error) => {
+                            entry.close.call::<()>((v, &state)).into_result().unwrap();
+
+                            let mut writer = StandardStream::stderr(ColorChoice::Auto);
+                            error.emit(&mut writer, &source).unwrap();
+                            control_flow.set_exit();
+                        }
                     }
                 }
-                Err(error) => {
-                    entry.close.call::<()>((v, &state)).into_result().unwrap();
-
-                    let mut writer = StandardStream::stderr(ColorChoice::Auto);
-                    error.emit(&mut writer, &source).unwrap();
-                    three_d::FrameOutput {
-                        exit: true,
-                        swap_buffers: false,
-                        wait_next_event: false,
+                winit::event::Event::WindowEvent { ref event, .. } => {
+                    frame_input_generator.handle_winit_window_event(event);
+                    match event {
+                        winit::event::WindowEvent::Resized(physical_size) => {
+                            context.resize(*physical_size);
+                        }
+                        winit::event::WindowEvent::ScaleFactorChanged {
+                            new_inner_size, ..
+                        } => {
+                            context.resize(**new_inner_size);
+                        }
+                        winit::event::WindowEvent::CloseRequested => {
+                            control_flow.set_exit();
+                        }
+                        _ => (),
                     }
                 }
+                _ => {}
             }
         });
-
-        Ok(())
     }
 }
 
@@ -267,7 +335,7 @@ impl FrameState {
         }
     }
 
-    fn process(&mut self, event_list: &[three_d::Event]) {
+    fn process(&mut self, event: &winit::event::Event<()>) {
         for button in &mut self.board {
             button.press = false;
             button.release = false;
@@ -278,24 +346,28 @@ impl FrameState {
             button.release = false;
         }
 
-        for event in event_list {
+        if let winit::event::Event::DeviceEvent { event, .. } = event {
             match event {
-                Event::MousePress { button, .. } => {
-                    self.mouse[*button as usize].up = false;
-                    self.mouse[*button as usize].press = true;
-                }
-                Event::MouseRelease { button, .. } => {
-                    self.mouse[*button as usize].up = true;
-                    self.mouse[*button as usize].release = true;
-                }
-                Event::KeyPress { kind, .. } => {
-                    self.board[*kind as usize].up = false;
-                    self.board[*kind as usize].press = true;
-                }
-                Event::KeyRelease { kind, .. } => {
-                    self.board[*kind as usize].up = true;
-                    self.board[*kind as usize].release = true;
-                }
+                winit::event::DeviceEvent::Button { button, state } => match state {
+                    winit::event::ElementState::Pressed => {
+                        self.mouse[*button as usize].up = false;
+                        self.mouse[*button as usize].press = true;
+                    }
+                    winit::event::ElementState::Released => {
+                        self.mouse[*button as usize].up = true;
+                        self.mouse[*button as usize].release = true;
+                    }
+                },
+                winit::event::DeviceEvent::Key(keyboard_input) => match keyboard_input.state {
+                    winit::event::ElementState::Pressed => {
+                        self.board[keyboard_input.scancode as usize].up = false;
+                        self.board[keyboard_input.scancode as usize].press = true;
+                    }
+                    winit::event::ElementState::Released => {
+                        self.board[keyboard_input.scancode as usize].up = true;
+                        self.board[keyboard_input.scancode as usize].release = true;
+                    }
+                },
                 _ => {}
             }
         }
