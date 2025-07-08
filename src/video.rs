@@ -56,7 +56,11 @@ use std::sync::Arc;
 
 //================================================================
 
-use rune::{Any, Module, Mut, alloc::HashMap, runtime::Function};
+use rune::{
+    Any, Module, Mut,
+    alloc::HashMap,
+    runtime::{Function, VmResult},
+};
 use three_d::{ClearState, ColorMaterial, ColorTarget, CpuTexture, Gm, Rectangle, RenderTarget};
 
 //================================================================
@@ -174,10 +178,12 @@ impl Frame {
     }
 
     #[rune::function]
-    fn draw(&mut self, state: &State, camera: Camera, render_call: Function) {
+    fn draw(&mut self, state: &State, camera: Camera, render_call: Function) -> VmResult<()> {
         use three_d::*;
 
         self.camera = Some(camera.0);
+
+        let mut result: VmResult<()> = VmResult::Ok(());
 
         state
             .frame_input
@@ -188,7 +194,7 @@ impl Frame {
                 unsafe {
                     let raw = self as *mut Frame;
 
-                    render_call.call::<()>((&mut *raw,)).unwrap();
+                    result = render_call.call::<()>((&mut *raw,));
                 }
 
                 self.flush();
@@ -196,6 +202,8 @@ impl Frame {
                 Ok(())
             })
             .unwrap();
+
+        result
     }
 
     fn draw_image(
@@ -463,11 +471,12 @@ struct Font {
 impl Font {
     #[rune::function(path = Self::new)]
     fn new(state: &State, path: &str, scale: f32) -> anyhow::Result<Self> {
+        // 127
         let code: String = (32..127).map(|x| x as u8 as char).collect();
         let font = std::fs::read(path)?;
         let font = fontdue::Font::from_bytes(font, fontdue::FontSettings::default()).unwrap();
         let mut layout =
-            fontdue::layout::Layout::new(fontdue::layout::CoordinateSystem::PositiveYDown);
+            fontdue::layout::Layout::new(fontdue::layout::CoordinateSystem::PositiveYUp);
         layout.append(
             std::slice::from_ref(&font),
             &fontdue::layout::TextStyle::new(&code, scale, 0),
@@ -542,24 +551,16 @@ impl Font {
     #[rune::function]
     #[rustfmt::skip]
     fn draw(&mut self, frame: &mut Frame, point: &Vector2, scale: f32, text: String) {
-        //use three_d::*;
-
         let mut push = 0.0;
 
-        //let point = camera.origin(point);
-        //let scale = scale / self.scale;
+        let scale = scale / self.scale;
 
         for character in text.chars() {
             if let Some(glyph) = self.map.get(&character) {
-                let texture_size = (
-                    self.data.width() as f32,
-                    self.data.height() as f32,
-                );
-
                 frame.draw_image(&self.hash, &self.data, &Box2 {
                     point: Vector2 {
-                        x: point.x + glyph.scale.0 * 0.5 + push,
-                        y: point.y - glyph.scale.1 * 0.5 - glyph.point.1
+                        x: point.x + push,
+                        y: point.y + glyph.point.1 * scale
                     },
                     scale: Vector2 {
                         x: glyph.scale.0 * scale,
@@ -568,19 +569,17 @@ impl Font {
                     angle: 0.0
                 }, &Box2 {
                     point: Vector2 {
-                        x: glyph.shift / texture_size.0,
-                        y: (texture_size.1 - glyph.scale.1) / texture_size.1
+                        x: glyph.shift,
+                        y: (self.data.height() as f32 - glyph.scale.1)
                     },
                     scale: Vector2 {
-                        x: glyph.scale.0 / texture_size.0,
-                        y: glyph.scale.1 / texture_size.1
+                        x: glyph.scale.0,
+                        y: glyph.scale.1
                     },
                     angle: 0.0
                 });
 
                 push += glyph.push.0 * scale;
-
-                //self.data.render(&camera.0, &[]);
             }
         }
     }
