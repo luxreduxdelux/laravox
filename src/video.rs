@@ -65,7 +65,13 @@ use three_d::{ClearState, ColorMaterial, ColorTarget, CpuTexture, Gm, Rectangle,
 #[rune(item = ::video)]
 struct Frame {
     // active batch texture.
-    texture: Option<Arc<three_d::Texture2D>>,
+    // UNFORTUNATELY, three_d does NOT make the texture ID public,
+    // so we need a way to hash the texture somehow...that way is through
+    // a string, for now. hopefully the ID is made public some day.
+    image: Option<(String, Arc<three_d::Texture2D>)>,
+
+    // active camera.
+    camera: Option<three_d::Camera>,
 
     // GPU buffer data.
     main_vertex_point: three_d::VertexBuffer<three_d::Vector2<f32>>,
@@ -111,7 +117,8 @@ impl Frame {
         .unwrap();
 
         Self {
-            texture: None,
+            image: None,
+            camera: None,
             main_vertex_point,
             main_texture_point,
             main_texture_color,
@@ -123,8 +130,54 @@ impl Frame {
     }
 
     #[rune::function]
-    fn draw(&mut self, state: &State, camera: &Camera, render_call: Function) {
+    fn draw_to(
+        &mut self,
+        state: &State,
+        camera: Camera,
+        render: &mut Render,
+        render_call: Function,
+    ) {
         use three_d::*;
+
+        self.camera = Some(camera.0);
+
+        let color = render.data_write.as_color_target(None);
+
+        let data: Vec<[u8; 4]> = color
+            .clear(ClearState::color_and_depth(1.0, 0.0, 0.0, 1.0, 1.0))
+            .write::<CoreError>(|| {
+                // rust, fuck off
+                unsafe {
+                    let raw = self as *mut Frame;
+
+                    render_call.call::<()>((&mut *raw,)).unwrap();
+                }
+
+                self.flush();
+
+                Ok(())
+            })
+            .unwrap()
+            .read();
+
+        let texture = CpuTexture {
+            data: TextureData::RgbaU8(data),
+            width: color.width(),
+            height: color.height(),
+            min_filter: Interpolation::Nearest,
+            mag_filter: Interpolation::Nearest,
+            ..Default::default()
+        };
+
+        // TO-DO there's probably a better way to go about this...
+        render.data = Arc::new(Texture2D::new(&state.frame_input.context, &texture));
+    }
+
+    #[rune::function]
+    fn draw(&mut self, state: &State, camera: Camera, render_call: Function) {
+        use three_d::*;
+
+        self.camera = Some(camera.0);
 
         state
             .frame_input
@@ -138,30 +191,41 @@ impl Frame {
                     render_call.call::<()>((&mut *raw,)).unwrap();
                 }
 
-                self.flush(state, camera);
+                self.flush();
 
                 Ok(())
             })
             .unwrap();
     }
 
-    fn draw_image(&mut self, image: &Image, box_a: &Box2 /*box_b: &Box2, color: Color*/) {
+    fn draw_image(
+        &mut self,
+        hash: &str,
+        image: &Arc<three_d::Texture2D>,
+        box_a: &Box2,
+        box_b: &Box2,
+    ) {
         // TO-DO only clone once, when setting a new texture, then re-use thereafter.
 
-        let scale = (image.data.width() as f32, image.data.height() as f32);
-
-        let box_b = Box2 {
-            point: crate::general::Vector2 { x: 0.0, y: 0.0 },
-            scale: crate::general::Vector2 {
-                x: scale.0,
-                y: scale.1,
-            },
-            angle: 0.0,
-        };
+        let scale = (image.width() as f32, image.height() as f32);
 
         use three_d::*;
 
-        self.texture = Some(image.data.clone());
+        // if we are already have an image to draw with...
+        if let Some((self_hash, _)) = &self.image {
+            // if the given image is not the same as our current one, flush the queue.
+            if hash != self_hash {
+                //println!("Forcing flush: {hash}");
+
+                self.flush();
+
+                // replace image.
+                self.image = Some((hash.to_string(), image.clone()));
+            }
+        } else {
+            // no image. set as active image.
+            self.image = Some((hash.to_string(), image.clone()));
+        }
 
         let x1 = box_a.point.x;
         let y1 = box_a.point.y;
@@ -202,8 +266,8 @@ impl Frame {
     }
 
     #[rustfmt::skip]
-    fn flush(&mut self, state: &State, camera: &Camera) {
-        if let Some(self_texture) = &self.texture && !self.side_vertex_point.is_empty() {
+    fn flush(&mut self) {
+        if let Some((_, self_image)) = &self.image && let Some(camera) = &self.camera && !self.side_vertex_point.is_empty() {
             //println!("flush!");
 
             use three_d::*;
@@ -214,16 +278,20 @@ impl Frame {
             self.main_texture_color.fill(&self.side_texture_color);
 
             // set every uniform, attribute.
-            self.program.use_uniform(Self::VIEW_PROJECTION, camera.0.projection() * camera.0.view());
-            self.program.use_texture(Self::TEXTURE_SAMPLE, self_texture);
+            self.program.use_uniform(Self::VIEW_PROJECTION, camera.projection() * camera.view());
+            self.program.use_texture(Self::TEXTURE_SAMPLE, self_image);
             self.program.use_vertex_attribute(Self::VERTEX_POINT, &self.main_vertex_point);
             self.program.use_vertex_attribute(Self::TEXTURE_POINT, &self.main_texture_point);
             self.program.use_vertex_attribute(Self::TEXTURE_COLOR, &self.main_texture_color);
 
             // render the batch.
             self.program.draw_arrays(
-                RenderStates::default(),
-                state.frame_input.viewport,
+                RenderStates {
+                    write_mask: WriteMask::COLOR,
+                    blend: Blend::TRANSPARENCY,
+                    ..Default::default()
+                },
+                camera.viewport(),
                 self.main_vertex_point.vertex_count(),
             );
 
@@ -250,53 +318,6 @@ impl Camera {
 
         Self(camera, Vector2 { x: 0.0, y: 0.0 })
     }
-
-    fn origin(&self, vector: &Vector2) -> Vector2 {
-        Vector2 {
-            x: self.0.viewport().x as f32 + vector.x,
-            //y: vector.y,
-            y: self.0.viewport().height as f32 - vector.y,
-        }
-    }
-
-    fn draw_texture(
-        &self,
-        data: &mut Gm<Rectangle, ColorMaterial>,
-        box_a: &Box2,
-        box_b: &Box2,
-        color: &Color,
-    ) {
-        use three_d::*;
-
-        let mut point = self.origin(&box_a.point);
-        point.x += box_a.scale.x * 0.5;
-        point.y -= box_a.scale.y * 0.5;
-
-        data.geometry.set_center(vec2(point.x, point.y));
-        data.geometry.set_size(box_a.scale.x, box_a.scale.y);
-        data.geometry.set_rotation(degrees(box_a.angle));
-
-        let texture = data.material.texture.as_mut().unwrap();
-        let texture_size = vec2(
-            texture.texture.width() as f32,
-            texture.texture.height() as f32,
-        );
-
-        let m_point = Mat3::from_translation(vec2(
-            box_b.point.x / texture_size.x,
-            (texture_size.y - box_b.point.y) / texture_size.y,
-        ));
-        let m_scale = Mat3::from_nonuniform_scale(
-            box_b.scale.x / texture_size.x,
-            box_b.scale.y / texture_size.y,
-        );
-
-        texture.transformation = m_point * m_scale;
-
-        data.material.color = color.clone().into();
-
-        data.render(&self.0, &[]);
-    }
 }
 
 //================================================================
@@ -306,15 +327,9 @@ impl Camera {
 #[derive(Any)]
 #[rune(item = ::video)]
 struct Render {
-    texture_color: three_d::Texture2D,
-    #[allow(dead_code)]
-    data: Gm<Rectangle, ColorMaterial>,
-    #[rune(get, set)]
-    box_a: Box2,
-    #[rune(get, set)]
-    box_b: Box2,
-    #[rune(get, set)]
-    color: Color,
+    data_write: three_d::Texture2D,
+    data: Arc<three_d::Texture2D>,
+    hash: String,
 }
 
 impl Render {
@@ -322,7 +337,7 @@ impl Render {
     fn new(state: &State, scale: Vector2) -> anyhow::Result<Self> {
         use three_d::*;
 
-        let texture_color = Texture2D::new_empty::<[u8; 4]>(
+        let data_write = Texture2D::new_empty::<[u8; 4]>(
             &state.frame_input.context,
             scale.x as u32,
             scale.y as u32,
@@ -333,7 +348,7 @@ impl Render {
             Wrapping::ClampToEdge,
         );
 
-        let texture = Texture2D::new_empty::<[u8; 4]>(
+        let data = Arc::new(Texture2D::new_empty::<[u8; 4]>(
             &state.frame_input.context,
             scale.x as u32,
             scale.y as u32,
@@ -342,98 +357,31 @@ impl Render {
             None,
             Wrapping::ClampToEdge,
             Wrapping::ClampToEdge,
-        );
-        let texture = ColorMaterial {
-            is_transparent: true,
-            render_states: RenderStates {
-                write_mask: WriteMask::COLOR,
-                blend: Blend::TRANSPARENCY,
-                ..Default::default()
-            },
-            texture: Some(texture.into()),
-            ..Default::default()
-        };
-
-        let data = Gm::new(
-            Rectangle::new(
-                &state.frame_input.context,
-                vec2(0.0, 0.0),
-                degrees(0.0),
-                0.0,
-                0.0,
-            ),
-            texture,
-        );
-
-        let t = data.material.texture.as_ref().unwrap();
-        let s = (t.width() as f32, t.height() as f32);
+        ));
 
         Ok(Self {
-            texture_color,
+            data_write,
             data,
-            box_a: Box2 {
-                point: crate::general::Vector2 { x: 0.0, y: 0.0 },
-                scale: crate::general::Vector2 { x: s.0, y: s.1 },
-                angle: 0.0,
-            },
-            box_b: Box2 {
-                point: crate::general::Vector2 { x: 0.0, y: 0.0 },
-                scale: crate::general::Vector2 { x: s.0, y: s.1 },
-                angle: 0.0,
-            },
-            color: crate::general::Color {
-                r: 255,
-                g: 255,
-                b: 255,
-                a: 255,
-            },
+            hash: "render_target".to_string(),
         })
     }
 
     #[rune::function]
-    fn draw_to(&mut self, state: &State, mut camera: Camera, call: Function) {
-        use three_d::*;
-
-        // this should really only use the material.texture from the
-        // render target, however, DerefMut is not available for
-        // an Arc<Texture2D>, so we can't use it.
-
-        let color = self.texture_color.as_color_target(None);
-
-        let mut view = camera.0.viewport();
-
-        view.y = -(view.height as i32 - color.height() as i32);
-
-        camera.0.set_viewport(view);
-
-        let data = color
-            .clear(ClearState::color_and_depth(0.8, 0.8, 0.8, 1.0, 1.0))
-            .write::<RendererError>(|| {
-                call.call::<()>((camera,)).unwrap();
-                Ok(())
-            })
-            .unwrap()
-            .read();
-
-        let texture = CpuTexture {
-            data: TextureData::RgbaU8(data),
-            width: color.width(),
-            height: color.height(),
-            min_filter: Interpolation::Nearest,
-            mag_filter: Interpolation::Nearest,
-            ..Default::default()
-        };
-
-        self.data.material.texture = Some(Texture2DRef::from_cpu_texture(
-            &state.frame_input.context,
-            &texture,
-        ));
-    }
-
-    #[rune::function]
     #[inline]
-    fn draw(&mut self, camera: &Camera) {
-        camera.draw_texture(&mut self.data, &self.box_a, &self.box_b, &self.color);
+    fn draw(&mut self, frame: &mut Frame, box_a: &Box2) {
+        frame.draw_image(
+            &self.hash,
+            &self.data,
+            box_a,
+            &Box2 {
+                point: Vector2 { x: 0.0, y: 0.0 },
+                scale: Vector2 {
+                    x: self.data.width() as f32,
+                    y: self.data.height() as f32,
+                },
+                angle: 0.0,
+            },
+        );
     }
 }
 
@@ -444,6 +392,7 @@ impl Render {
 struct Image {
     #[allow(dead_code)]
     data: Arc<three_d::Texture2D>,
+    hash: String,
 }
 
 impl Image {
@@ -456,13 +405,26 @@ impl Image {
 
         Ok(Self {
             data: Arc::new(texture),
+            hash: path.to_string(),
         })
     }
 
     #[rune::function]
     #[inline]
     fn draw(&mut self, frame: &mut Frame, box_a: &Box2) {
-        frame.draw_image(self, box_a);
+        frame.draw_image(
+            &self.hash,
+            &self.data,
+            box_a,
+            &Box2 {
+                point: Vector2 { x: 0.0, y: 0.0 },
+                scale: Vector2 {
+                    x: self.data.width() as f32,
+                    y: self.data.height() as f32,
+                },
+                angle: 0.0,
+            },
+        );
 
         //camera.draw_texture(&mut self.data, &self.box_a, &self.box_b, &self.color);
     }
@@ -493,7 +455,8 @@ impl Glyph {
 struct Font {
     #[allow(dead_code)]
     map: HashMap<char, Glyph>,
-    data: Gm<Rectangle, ColorMaterial>,
+    data: Arc<three_d::Texture2D>,
+    hash: String,
     scale: f32,
 }
 
@@ -557,7 +520,7 @@ impl Font {
 
         use three_d::*;
 
-        let texture = CpuTexture {
+        let data = CpuTexture {
             data: TextureData::RgbaU8(buffer),
             width: size.0 as u32,
             height: size.1 as u32,
@@ -566,72 +529,58 @@ impl Font {
             ..Default::default()
         };
 
-        let texture = ColorMaterial {
-            is_transparent: true,
-            render_states: RenderStates {
-                write_mask: WriteMask::COLOR,
-                blend: Blend::TRANSPARENCY,
-                ..Default::default()
-            },
-            texture: Some(Texture2DRef::from_cpu_texture(
-                &state.frame_input.context,
-                &texture,
-            )),
-            ..Default::default()
-        };
+        let data = Arc::new(Texture2D::new(&state.frame_input.context, &data));
 
-        let data = Gm::new(
-            Rectangle::new(
-                &state.frame_input.context,
-                vec2(0.0, 0.0),
-                degrees(0.0),
-                0.0,
-                0.0,
-            ),
-            texture,
-        );
-
-        Ok(Self { map, data, scale })
+        Ok(Self {
+            map,
+            data,
+            hash: path.to_string(),
+            scale,
+        })
     }
 
     #[rune::function]
     #[rustfmt::skip]
-    fn draw(&mut self, camera: &Camera, point: &Vector2, scale: f32, text: String) {
-        use three_d::*;
+    fn draw(&mut self, frame: &mut Frame, point: &Vector2, scale: f32, text: String) {
+        //use three_d::*;
 
         let mut push = 0.0;
 
-        let point = camera.origin(point);
-        let scale = scale / self.scale;
+        //let point = camera.origin(point);
+        //let scale = scale / self.scale;
 
         for character in text.chars() {
             if let Some(glyph) = self.map.get(&character) {
-                self.data.geometry.set_center(vec2(
-                    point.x + glyph.scale.0 * 0.5 + push,
-                    point.y - glyph.scale.1 * 0.5 - glyph.point.1
-                ));
-                self.data.geometry.set_size(glyph.scale.0 * scale, glyph.scale.1 * scale);
-
-                let texture = self.data.material.texture.as_mut().unwrap();
-                let texture_size = vec2(
-                    texture.texture.width() as f32,
-                    texture.texture.height() as f32,
+                let texture_size = (
+                    self.data.width() as f32,
+                    self.data.height() as f32,
                 );
 
-                let m_point = Mat3::from_translation(vec2(
-                    glyph.shift / texture_size.x,
-                    (texture_size.y - glyph.scale.1) / texture_size.y,
-                ));
-                let m_scale = Mat3::from_nonuniform_scale(
-                    glyph.scale.0 / texture_size.x,
-                    glyph.scale.1 / texture_size.y
-                );
-
-                texture.transformation = m_point * m_scale;
+                frame.draw_image(&self.hash, &self.data, &Box2 {
+                    point: Vector2 {
+                        x: point.x + glyph.scale.0 * 0.5 + push,
+                        y: point.y - glyph.scale.1 * 0.5 - glyph.point.1
+                    },
+                    scale: Vector2 {
+                        x: glyph.scale.0 * scale,
+                        y: glyph.scale.1 * scale
+                    },
+                    angle: 0.0
+                }, &Box2 {
+                    point: Vector2 {
+                        x: glyph.shift / texture_size.0,
+                        y: (texture_size.1 - glyph.scale.1) / texture_size.1
+                    },
+                    scale: Vector2 {
+                        x: glyph.scale.0 / texture_size.0,
+                        y: glyph.scale.1 / texture_size.1
+                    },
+                    angle: 0.0
+                });
 
                 push += glyph.push.0 * scale;
 
-                self.data.render(&camera.0, &[]);
+                //self.data.render(&camera.0, &[]);
             }
         }
     }
@@ -646,13 +595,13 @@ pub fn module() -> anyhow::Result<Module> {
     module.ty::<Frame>()?;
     module.function_meta(Frame::new)?;
     module.function_meta(Frame::draw)?;
+    module.function_meta(Frame::draw_to)?;
 
     module.ty::<Camera>()?;
     module.function_meta(Camera::new)?;
 
     module.ty::<Render>()?;
     module.function_meta(Render::new)?;
-    module.function_meta(Render::draw_to)?;
     module.function_meta(Render::draw)?;
 
     module.ty::<Image>()?;

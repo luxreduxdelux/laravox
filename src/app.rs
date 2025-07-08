@@ -155,7 +155,7 @@ impl App {
 
         let window = window.build(&event_loop)?;
         let surface = SurfaceSettings {
-            vsync: false,
+            vsync: true,
             ..Default::default()
         };
 
@@ -222,7 +222,7 @@ impl App {
 
                     let v = value.as_ref().unwrap();
 
-                    println!("{}", 1.0 / (frame_input.elapsed_time / 1000.0));
+                    //println!("{}", 1.0 / (frame_input.elapsed_time / 1000.0));
 
                     let state = State::new(frame_input.clone(), frame_state, handle.clone());
 
