@@ -15,9 +15,6 @@ strip         = "none"
 debug = 0
 
 [dependencies]
-#================================================================
-# core.
-#================================================================
 # rune.
 rune          = { version = "0.14.0" }
 rune-modules  = { version = "0.14.0", features = ["full"] }
@@ -29,8 +26,9 @@ three-d-asset = { version = "0.9.2", features = ["png"] }
 # sound/music play-back.
 rodio         = { version = "0.20.1" }
 # font rasterizer.
-fontdue       = { version = "0.9.3" }
-# dynamic library loader.
-libloading    = { version = "0.8.8" }
+fontdue       = { version = "0.9.3"  }
 # window handler.
-winit         = { version = "0.28"  }
+winit         = { version = "0.28"   }
+# controller input handler.
+gilrs         = { version = "0.11.0" }
+rfd           = { version = "0.15.3" }

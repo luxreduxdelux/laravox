@@ -57,11 +57,10 @@ use std::sync::Arc;
 //================================================================
 
 use rune::{
-    Any, Module, Mut,
+    Any, Module,
     alloc::HashMap,
     runtime::{Function, VmResult},
 };
-use three_d::{ClearState, ColorMaterial, ColorTarget, CpuTexture, Gm, Rectangle, RenderTarget};
 
 //================================================================
 
@@ -137,15 +136,36 @@ impl Frame {
     fn draw_to(
         &mut self,
         state: &State,
-        camera: Camera,
+        mut camera: Camera,
         render: &mut Render,
         render_call: Function,
-    ) {
+    ) -> VmResult<()> {
         use three_d::*;
 
-        self.camera = Some(camera.0);
+        let viewport = Viewport::new_at_origo(render.data.width(), render.data.height());
+
+        camera.inner.set_viewport(viewport);
+        camera.inner.set_view(
+            three_d::vec3(
+                viewport.width as f32 * 0.5,
+                viewport.height as f32 * -0.5,
+                1.0,
+            ),
+            three_d::vec3(
+                viewport.width as f32 * 0.5,
+                viewport.height as f32 * -0.5,
+                0.0,
+            ),
+            three_d::vec3(0.0, 1.0, 0.0),
+        );
+        camera
+            .inner
+            .set_orthographic_projection(viewport.height as f32, 0.0, 1.0);
+
+        self.camera = Some(camera.inner);
 
         let color = render.data_write.as_color_target(None);
+        let mut value = VmResult::Ok(());
 
         let data: Vec<[u8; 4]> = color
             .clear(ClearState::color_and_depth(1.0, 0.0, 0.0, 1.0, 1.0))
@@ -154,7 +174,7 @@ impl Frame {
                 unsafe {
                     let raw = self as *mut Frame;
 
-                    render_call.call::<()>((&mut *raw,)).unwrap();
+                    value = render_call.call::<()>((&mut *raw,));
                 }
 
                 self.flush();
@@ -175,13 +195,15 @@ impl Frame {
 
         // TO-DO there's probably a better way to go about this...
         render.data = Arc::new(Texture2D::new(&state.frame_input.context, &texture));
+
+        value
     }
 
     #[rune::function]
     fn draw(&mut self, state: &State, camera: Camera, render_call: Function) -> VmResult<()> {
         use three_d::*;
 
-        self.camera = Some(camera.0);
+        self.camera = Some(camera.inner);
 
         let mut result: VmResult<()> = VmResult::Ok(());
 
@@ -212,9 +234,8 @@ impl Frame {
         image: &Arc<three_d::Texture2D>,
         box_a: &Box2,
         box_b: &Box2,
+        color: &Color,
     ) {
-        // TO-DO only clone once, when setting a new texture, then re-use thereafter.
-
         let scale = (image.width() as f32, image.height() as f32);
 
         use three_d::*;
@@ -223,8 +244,6 @@ impl Frame {
         if let Some((self_hash, _)) = &self.image {
             // if the given image is not the same as our current one, flush the queue.
             if hash != self_hash {
-                //println!("Forcing flush: {hash}");
-
                 self.flush();
 
                 // replace image.
@@ -235,21 +254,30 @@ impl Frame {
             self.image = Some((hash.to_string(), image.clone()));
         }
 
+        let mut box_a = *box_a;
+
+        if box_a.scale.x < 0.0 {
+            box_a.point.x -= box_a.scale.x;
+        }
+        if box_a.scale.y < 0.0 {
+            box_a.point.y -= box_a.scale.y;
+        }
+
         let x1 = box_a.point.x;
-        let y1 = box_a.point.y;
+        let y1 = -box_a.point.y;
         let x2 = box_a.point.x + box_a.scale.x;
-        let y2 = box_a.point.y + box_a.scale.y;
+        let y2 = -box_a.point.y - box_a.scale.y;
 
         let u1 = box_b.point.x / scale.0;
-        let v1 = box_b.point.y / scale.1;
+        let v1 = -box_b.point.y / scale.1;
         let u2 = (box_b.point.x + box_b.scale.x) / scale.0;
-        let v2 = (box_b.point.y + box_b.scale.y) / scale.1;
+        let v2 = (-box_b.point.y - box_b.scale.y) / scale.1;
 
         let color = vec4(
-            1.0, //color.r as f32 / 255.0,
-            1.0, //color.g as f32 / 255.0,
-            1.0, //color.b as f32 / 255.0,
-            1.0, //color.a as f32 / 255.0,
+            color.r as f32 / 255.0,
+            color.g as f32 / 255.0,
+            color.b as f32 / 255.0,
+            color.a as f32 / 255.0,
         );
 
         // move data into CPU buffer.
@@ -316,19 +344,39 @@ impl Frame {
 #[derive(Any, Clone)]
 #[allow(dead_code)]
 #[rune(item = ::video)]
-struct Camera(three_d::Camera, Vector2);
+struct Camera {
+    inner: three_d::Camera,
+}
 
 impl Camera {
     #[rune::function(path = Self::new)]
-    fn new(state: &State) -> Self {
-        let mut camera = three_d::Camera::new_2d(state.frame_input.viewport);
+    fn new(state: &State, point: Vector2, angle: f32, zoom: f32) -> Self {
+        let mut camera = three_d::Camera::new_orthographic(
+            state.frame_input.viewport,
+            three_d::vec3(
+                point.x + state.frame_input.viewport.width as f32 * 0.5,
+                point.y + state.frame_input.viewport.height as f32 * -0.5,
+                1.0,
+            ),
+            three_d::vec3(
+                point.x + state.frame_input.viewport.width as f32 * 0.5,
+                point.y + state.frame_input.viewport.height as f32 * -0.5,
+                0.0,
+            ),
+            three_d::vec3(0.0, 1.0, 0.0),
+            state.frame_input.viewport.height as f32,
+            0.0,
+            10.0,
+        );
+
+        camera.roll(three_d::degrees(angle));
+        camera.set_zoom_factor(zoom);
+
         camera.disable_tone_and_color_mapping();
 
-        Self(camera, Vector2 { x: 0.0, y: 0.0 })
+        Self { inner: camera }
     }
 }
-
-//================================================================
 
 //================================================================
 
@@ -375,21 +423,71 @@ impl Render {
     }
 
     #[rune::function]
-    #[inline]
-    fn draw(&mut self, frame: &mut Frame, box_a: &Box2) {
+    fn draw(&mut self, frame: &mut Frame, point: &Vector2) {
+        frame.draw_image(
+            &self.hash,
+            &self.data,
+            &Box2::rust_new(
+                *point,
+                Vector2::rust_new(self.data.width() as f32, self.data.height() as f32),
+                0.0,
+            ),
+            &Box2::rust_new(
+                Vector2::rust_new(0.0, 0.0),
+                Vector2::rust_new(self.data.width() as f32, self.data.height() as f32),
+                0.0,
+            ),
+            &Color::rust_new(255, 255, 255, 255),
+        );
+    }
+
+    #[rune::function]
+    fn draw_box(&mut self, frame: &mut Frame, box_a: &Box2) {
         frame.draw_image(
             &self.hash,
             &self.data,
             box_a,
-            &Box2 {
-                point: Vector2 { x: 0.0, y: 0.0 },
-                scale: Vector2 {
-                    x: self.data.width() as f32,
-                    y: self.data.height() as f32,
-                },
-                angle: 0.0,
-            },
+            &Box2::rust_new(
+                Vector2::rust_new(0.0, 0.0),
+                Vector2::rust_new(self.data.width() as f32, self.data.height() as f32),
+                0.0,
+            ),
+            &Color::rust_new(255, 255, 255, 255),
         );
+    }
+
+    #[rune::function]
+    fn draw_box_color(&mut self, frame: &mut Frame, box_a: &Box2, color: &Color) {
+        frame.draw_image(
+            &self.hash,
+            &self.data,
+            box_a,
+            &Box2::rust_new(
+                Vector2::rust_new(0.0, 0.0),
+                Vector2::rust_new(self.data.width() as f32, self.data.height() as f32),
+                0.0,
+            ),
+            color,
+        );
+    }
+
+    #[rune::function]
+    fn draw_box_color_clip(
+        &mut self,
+        frame: &mut Frame,
+        box_a: &Box2,
+        box_b: &Box2,
+        color: &Color,
+    ) {
+        frame.draw_image(&self.hash, &self.data, box_a, box_b, color);
+    }
+
+    #[rune::function]
+    fn scale(&self) -> Vector2 {
+        Vector2 {
+            x: self.data.width() as f32,
+            y: self.data.height() as f32,
+        }
     }
 }
 
@@ -409,7 +507,12 @@ impl Image {
         use three_d::*;
 
         let mut texture = three_d_asset::io::load(&[path])?;
-        let texture = Texture2D::new(&state.frame_input.context, &texture.deserialize("")?);
+        let mut texture: CpuTexture = texture.deserialize("")?;
+
+        texture.min_filter = Interpolation::Nearest;
+        texture.mag_filter = Interpolation::Nearest;
+
+        let texture = Texture2D::new(&state.frame_input.context, &texture);
 
         Ok(Self {
             data: Arc::new(texture),
@@ -418,23 +521,71 @@ impl Image {
     }
 
     #[rune::function]
-    #[inline]
-    fn draw(&mut self, frame: &mut Frame, box_a: &Box2) {
+    fn draw(&mut self, frame: &mut Frame, point: &Vector2) {
+        frame.draw_image(
+            &self.hash,
+            &self.data,
+            &Box2::rust_new(
+                *point,
+                Vector2::rust_new(self.data.width() as f32, self.data.height() as f32),
+                0.0,
+            ),
+            &Box2::rust_new(
+                Vector2::rust_new(0.0, 0.0),
+                Vector2::rust_new(self.data.width() as f32, self.data.height() as f32),
+                0.0,
+            ),
+            &Color::rust_new(255, 255, 255, 255),
+        );
+    }
+
+    #[rune::function]
+    fn draw_box(&mut self, frame: &mut Frame, box_a: &Box2) {
         frame.draw_image(
             &self.hash,
             &self.data,
             box_a,
-            &Box2 {
-                point: Vector2 { x: 0.0, y: 0.0 },
-                scale: Vector2 {
-                    x: self.data.width() as f32,
-                    y: self.data.height() as f32,
-                },
-                angle: 0.0,
-            },
+            &Box2::rust_new(
+                Vector2::rust_new(0.0, 0.0),
+                Vector2::rust_new(self.data.width() as f32, self.data.height() as f32),
+                0.0,
+            ),
+            &Color::rust_new(255, 255, 255, 255),
         );
+    }
 
-        //camera.draw_texture(&mut self.data, &self.box_a, &self.box_b, &self.color);
+    #[rune::function]
+    fn draw_box_color(&mut self, frame: &mut Frame, box_a: &Box2, color: &Color) {
+        frame.draw_image(
+            &self.hash,
+            &self.data,
+            box_a,
+            &Box2::rust_new(
+                Vector2::rust_new(0.0, 0.0),
+                Vector2::rust_new(self.data.width() as f32, self.data.height() as f32),
+                0.0,
+            ),
+            color,
+        );
+    }
+
+    #[rune::function]
+    fn draw_box_color_clip(
+        &mut self,
+        frame: &mut Frame,
+        box_a: &Box2,
+        box_b: &Box2,
+        color: &Color,
+    ) {
+        frame.draw_image(&self.hash, &self.data, box_a, box_b, color);
+    }
+
+    #[rune::function]
+    fn scale(&self) -> Vector2 {
+        Vector2 {
+            x: self.data.width() as f32,
+            y: self.data.height() as f32,
+        }
     }
 }
 
@@ -471,12 +622,11 @@ struct Font {
 impl Font {
     #[rune::function(path = Self::new)]
     fn new(state: &State, path: &str, scale: f32) -> anyhow::Result<Self> {
-        // 127
         let code: String = (32..127).map(|x| x as u8 as char).collect();
         let font = std::fs::read(path)?;
         let font = fontdue::Font::from_bytes(font, fontdue::FontSettings::default()).unwrap();
         let mut layout =
-            fontdue::layout::Layout::new(fontdue::layout::CoordinateSystem::PositiveYUp);
+            fontdue::layout::Layout::new(fontdue::layout::CoordinateSystem::PositiveYDown);
         layout.append(
             std::slice::from_ref(&font),
             &fontdue::layout::TextStyle::new(&code, scale, 0),
@@ -570,18 +720,34 @@ impl Font {
                 }, &Box2 {
                     point: Vector2 {
                         x: glyph.shift,
-                        y: (self.data.height() as f32 - glyph.scale.1)
+                        y: 0.0
                     },
                     scale: Vector2 {
                         x: glyph.scale.0,
                         y: glyph.scale.1
                     },
                     angle: 0.0
-                });
+                }, &Color { r: 255, g: 255, b: 255, a: 255 });
 
                 push += glyph.push.0 * scale;
             }
         }
+    }
+}
+
+//================================================================
+
+#[derive(Any)]
+#[rune(item = ::video)]
+struct Canvas {}
+
+impl Canvas {
+    #[rune::function(path = Self::scale)]
+    fn scale(state: &State) -> Vector2 {
+        Vector2::rust_new(
+            state.frame_input.viewport.width as f32,
+            state.frame_input.viewport.height as f32,
+        )
     }
 }
 
@@ -602,14 +768,25 @@ pub fn module() -> anyhow::Result<Module> {
     module.ty::<Render>()?;
     module.function_meta(Render::new)?;
     module.function_meta(Render::draw)?;
+    module.function_meta(Render::draw_box)?;
+    module.function_meta(Render::draw_box_color)?;
+    module.function_meta(Render::draw_box_color_clip)?;
+    module.function_meta(Render::scale)?;
 
     module.ty::<Image>()?;
     module.function_meta(Image::new)?;
     module.function_meta(Image::draw)?;
+    module.function_meta(Image::draw_box)?;
+    module.function_meta(Image::draw_box_color)?;
+    module.function_meta(Image::draw_box_color_clip)?;
+    module.function_meta(Image::scale)?;
 
     module.ty::<Font>()?;
     module.function_meta(Font::new)?;
     module.function_meta(Font::draw)?;
+
+    module.ty::<Canvas>()?;
+    module.function_meta(Canvas::scale)?;
 
     Ok(module)
 }

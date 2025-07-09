@@ -48,19 +48,99 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-use crate::app::App;
+use rune::Module;
+use std::fs;
 
 //================================================================
 
-mod app;
-mod audio;
-mod file;
-mod general;
-mod input;
-mod video;
+#[rune::module(::file)]
+pub fn module() -> anyhow::Result<Module> {
+    let mut module = Module::from_meta(self::module_meta)?;
+
+    module.function_meta(canonicalize)?;
+    module.function_meta(copy)?;
+    module.function_meta(create_path)?;
+    module.function_meta(create_path_all)?;
+    module.function_meta(check)?;
+    module.function_meta(read)?;
+    //module.function_meta(read_dir)?;
+    //module.function_meta(read_link)?;
+    module.function_meta(read_to_string)?;
+    module.function_meta(remove_path)?;
+    module.function_meta(remove_path_all)?;
+    module.function_meta(remove_file)?;
+    module.function_meta(rename)?;
+    //module.function_meta(set_permissions)?;
+    //module.function_meta(symlink_metadata)?;
+    //module.function_meta(write)?;
+
+    Ok(module)
+}
 
 //================================================================
 
-fn main() -> anyhow::Result<()> {
-    App::run()
+#[rune::function]
+#[inline]
+fn canonicalize(path: String) -> anyhow::Result<String> {
+    Ok(fs::canonicalize(&path).map(|x| x.display().to_string())?)
+}
+
+#[rune::function]
+#[inline]
+fn copy(from: String, to: String) -> anyhow::Result<u64> {
+    Ok(fs::copy(&from, &to)?)
+}
+
+#[rune::function]
+#[inline]
+fn create_path(path: String) -> anyhow::Result<()> {
+    Ok(fs::create_dir(&path)?)
+}
+
+#[rune::function]
+#[inline]
+fn create_path_all(path: String) -> anyhow::Result<()> {
+    Ok(fs::create_dir_all(&path)?)
+}
+
+#[rune::function]
+#[inline]
+fn check(path: String) -> anyhow::Result<bool> {
+    Ok(fs::exists(&path)?)
+}
+
+#[rune::function]
+#[inline]
+fn read(path: String) -> anyhow::Result<Vec<u8>> {
+    Ok(fs::read(&path)?)
+}
+
+#[rune::function]
+#[inline]
+fn read_to_string(path: String) -> anyhow::Result<String> {
+    Ok(fs::read_to_string(&path)?)
+}
+
+#[rune::function]
+#[inline]
+fn remove_path(path: String) -> anyhow::Result<()> {
+    Ok(fs::remove_dir(&path)?)
+}
+
+#[rune::function]
+#[inline]
+fn remove_path_all(path: String) -> anyhow::Result<()> {
+    Ok(fs::remove_dir_all(&path)?)
+}
+
+#[rune::function]
+#[inline]
+fn remove_file(path: String) -> anyhow::Result<()> {
+    Ok(fs::remove_file(&path)?)
+}
+
+#[rune::function]
+#[inline]
+fn rename(from: String, to: String) -> anyhow::Result<()> {
+    Ok(fs::rename(&from, &to)?)
 }

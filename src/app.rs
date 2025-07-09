@@ -48,92 +48,28 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-use libloading::{Library, Symbol};
 use rune::{
-    Any, Diagnostics, Module, Source, Sources, Value, Vm,
-    alloc::clone::TryClone,
-    runtime::Function,
+    Any, Context, Diagnostics, Module, Source, Sources, Unit, Value, Vm, diagnostics,
+    runtime::{Function, VmResult},
     termcolor::{ColorChoice, StandardStream},
 };
 use std::sync::Arc;
-use three_d::{Event, FrameInputGenerator, SurfaceSettings, WindowedContext};
+use three_d::{FrameInputGenerator, SurfaceSettings, WindowedContext};
+use winit::event_loop::ControlFlow;
 
 //================================================================
 
 pub struct App {}
 
 impl App {
-    fn load_script() -> anyhow::Result<(Vec<Library>, Sources, Vm)> {
-        println!();
-        println!("//================================================================");
-        println!("//  Laravox (1.0.0)");
-        println!("//================================================================");
-        println!();
-
-        let mut module = Module::new();
-        module.ty::<Entry>()?;
-        module.ty::<Window>()?;
-
-        // install each module into the Rune context.
-        let mut context = rune_modules::default_context()?;
-
-        let library_list = Vec::new();
-
-        /*
-        unsafe {
-            let library = Library::new("/home/think/laravox/librune_library.so").unwrap();
-            let get_module: Symbol<fn() -> Module> = library.get(b"module").unwrap();
-
-            let result = get_module();
-
-            context.install(result)?;
-
-            library_list.push(library);
-        }
-        */
-
-        context.install(module)?;
-        context.install(crate::video::module()?)?;
-        context.install(crate::audio::module()?)?;
-        context.install(crate::input::module()?)?;
-        context.install(crate::general::module()?)?;
-
-        let runtime = Arc::new(context.runtime()?);
-
-        let mut sources = Sources::new();
-
-        sources.insert(Source::from_path("script/main.rn")?)?;
-
-        let mut diagnostics = Diagnostics::new();
-
-        let result = rune::prepare(&mut sources)
-            .with_context(&context)
-            .with_diagnostics(&mut diagnostics)
-            .build();
-
-        if !diagnostics.is_empty() {
-            // if not ColorChoice::Never, will bug out on Sublime's terminal
-            let mut writer = StandardStream::stderr(ColorChoice::Auto);
-            diagnostics.emit(&mut writer, &sources)?;
-        }
-
-        let unit = result?;
-        let unit = Arc::new(unit);
-
-        let vm = Vm::new(runtime.clone(), unit.clone());
-
-        Ok((library_list, sources, vm))
-    }
-
     fn load_window(
-        vm: &mut Vm,
-        entry: &Entry,
+        script: &Script,
     ) -> anyhow::Result<(
         three_d::WindowedContext,
         winit::event_loop::EventLoop<()>,
         winit::window::Window,
     )> {
-        let r_window = entry.window.call::<Window>(()).into_result()?;
+        let r_window = script.window.call::<Window>(()).into_result()?;
 
         let event_loop = winit::event_loop::EventLoop::new();
 
@@ -161,136 +97,87 @@ impl App {
 
         let context = WindowedContext::from_winit_window(&window, surface).unwrap();
 
-        /*
-        Ok(three_d::Window::new(three_d::WindowSettings {
-            title: window.title.unwrap_or("Laravox".to_string()),
-            min_size: window.min_scale.unwrap_or((640, 480)),
-            max_size: window.max_scale,
-            initial_size: window.scale,
-            borderless: window.full.unwrap_or(false),
-            surface_settings: SurfaceSettings {
-                vsync: true,
-                ..Default::default()
-            },
-        })?)
-        */
-
         Ok((context, event_loop, window))
     }
 
     fn load_value(
-        entry: &Entry,
+        script: &Script,
         frame_input: three_d::FrameInput,
         handle: rodio::OutputStreamHandle,
     ) -> anyhow::Result<Value> {
         let state = State::new(frame_input, FrameState::new(), handle);
 
-        Ok(entry.begin.call::<Value>((state,)).into_result()?)
+        match script.begin.call::<Value>((state,)) {
+            VmResult::Ok(value) => return Ok(value),
+            VmResult::Err(error) => {
+                let mut writer = StandardStream::stderr(ColorChoice::Auto);
+                error.emit(&mut writer, &script.source).unwrap();
+            }
+        };
+
+        Err(anyhow::Error::msg(""))
     }
 
     pub fn run() -> anyhow::Result<()> {
         // load audio handle.
         let (_stream, handle) = rodio::OutputStream::try_default()?;
 
-        // load script data.
-        let (_, mut source, mut script) = Self::load_script()?;
-        let mut entry = Entry::new(&mut script)?;
+        let mut script = Script::new()?;
 
         // load window.
-        let (context, event_loop, window) = Self::load_window(&mut script, &entry)?;
+        let (context, event_loop, window) = Self::load_window(&script)?;
 
         let mut frame_state = FrameState::new();
-        let mut value = None;
-
         let mut frame_input_generator = FrameInputGenerator::from_winit_window(&window);
 
         event_loop.run(move |event, _, control_flow| {
-            //frame_state.process(&event);
-
             match event {
                 winit::event::Event::MainEventsCleared => {
-                    window.request_redraw();
-                }
-                winit::event::Event::RedrawRequested(_) => {
                     let frame_input = frame_input_generator.generate(&context);
+                    let state = State::new(frame_input.clone(), frame_state, handle.clone());
 
-                    if value.is_none() {
-                        value = Some(
-                            Self::load_value(&entry, frame_input.clone(), handle.clone()).unwrap(),
+                    if script.value.is_none() {
+                        script.value = Some(
+                            Self::load_value(&script, frame_input.clone(), handle.clone()).unwrap(),
                         );
                     }
 
-                    let v = value.as_ref().unwrap();
+                    let value = script.value.as_ref().unwrap();
+                    let frame = script.frame.call::<usize>((value, &state));
 
-                    //println!("{}", 1.0 / (frame_input.elapsed_time / 1000.0));
-
-                    let state = State::new(frame_input.clone(), frame_state, handle.clone());
-
-                    let call = entry.frame.call::<usize>((v, &state)).into_result();
-
-                    match call {
-                        Ok(code) => {
-                            if code == 0 {
-                                entry.close.call::<()>((v, &state)).into_result().unwrap();
-
+                    match frame {
+                        VmResult::Ok(code) => {
+                            if code == 1 {
+                                // exit Laravox.
                                 control_flow.set_exit();
-                            } else if code == 1 {
-                                entry.close.call::<()>((v, &state)).into_result().unwrap();
-
-                                let (_, c_source, mut c_script) = Self::load_script().unwrap();
-                                let c_entry = Entry::new(&mut c_script).unwrap();
-
-                                source = c_source;
-                                entry = c_entry;
-
-                                value = Some(
-                                    Self::load_value(&entry, frame_input.clone(), handle.clone())
-                                        .unwrap(),
-                                );
-
-                                context.swap_buffers().unwrap();
-                                control_flow.set_poll();
-                                window.request_redraw();
-                            } else {
-                                context.swap_buffers().unwrap();
-                                control_flow.set_poll();
-                                window.request_redraw();
+                            } else if code == 2 {
+                                // hot-reload.
+                                script.reload().unwrap();
+                            } else if code == 3 {
+                                // restart.
+                                script = Script::new().unwrap();
                             }
                         }
-                        Err(error) => {
-                            entry.close.call::<()>((v, &state)).into_result().unwrap();
-
+                        VmResult::Err(error) => {
                             let mut writer = StandardStream::stderr(ColorChoice::Auto);
-                            error.emit(&mut writer, &source).unwrap();
-                            control_flow.set_exit();
+                            error.emit(&mut writer, &script.source).unwrap();
+
+                            if Script::error("Script Error", &error.to_string()) {
+                                script = Script::new().unwrap();
+                            } else {
+                                control_flow.set_exit();
+                            }
                         }
                     }
-                }
-                winit::event::Event::WindowEvent { ref event, .. } => {
-                    frame_input_generator.handle_winit_window_event(event);
-                    match event {
-                        winit::event::WindowEvent::Resized(physical_size) => {
-                            context.resize(*physical_size);
-                        }
-                        winit::event::WindowEvent::ScaleFactorChanged {
-                            new_inner_size, ..
-                        } => {
-                            context.resize(**new_inner_size);
-                        }
-                        winit::event::WindowEvent::CloseRequested => {
-                            control_flow.set_exit();
-                        }
-                        _ => (),
-                    }
+
+                    context.swap_buffers().unwrap();
                 }
                 _ => {}
             }
+
+            frame_state.process(&event, &context, &mut frame_input_generator, control_flow);
         });
     }
-}
-
-impl Drop for App {
-    fn drop(&mut self) {}
 }
 
 //================================================================
@@ -325,8 +212,11 @@ pub struct FrameState {
 }
 
 impl FrameState {
-    const BUTTON_COUNT_BOARD: usize = 51;
-    const BUTTON_COUNT_MOUSE: usize = 3;
+    // this has to match the VirtualKeyCode count in winit.
+    const BUTTON_COUNT_BOARD: usize = 163;
+    // don't actually know what the total mouse button count is.
+    // a run-time check is done to make sure you can actually index stuff...
+    const BUTTON_COUNT_MOUSE: usize = 16;
 
     fn new() -> Self {
         Self {
@@ -335,7 +225,13 @@ impl FrameState {
         }
     }
 
-    fn process(&mut self, event: &winit::event::Event<()>) {
+    fn process(
+        &mut self,
+        event: &winit::event::Event<()>,
+        context: &WindowedContext,
+        generator: &mut FrameInputGenerator,
+        control_flow: &mut ControlFlow,
+    ) {
         for button in &mut self.board {
             button.press = false;
             button.release = false;
@@ -346,30 +242,55 @@ impl FrameState {
             button.release = false;
         }
 
-        if let winit::event::Event::DeviceEvent { event, .. } = event {
-            match event {
-                winit::event::DeviceEvent::Button { button, state } => match state {
-                    winit::event::ElementState::Pressed => {
-                        self.mouse[*button as usize].up = false;
-                        self.mouse[*button as usize].press = true;
+        match event {
+            winit::event::Event::WindowEvent { event, .. } => {
+                generator.handle_winit_window_event(event);
+                match event {
+                    winit::event::WindowEvent::Resized(physical_size) => {
+                        context.resize(*physical_size);
                     }
-                    winit::event::ElementState::Released => {
-                        self.mouse[*button as usize].up = true;
-                        self.mouse[*button as usize].release = true;
+                    winit::event::WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                        context.resize(**new_inner_size);
                     }
-                },
-                winit::event::DeviceEvent::Key(keyboard_input) => match keyboard_input.state {
-                    winit::event::ElementState::Pressed => {
-                        self.board[keyboard_input.scancode as usize].up = false;
-                        self.board[keyboard_input.scancode as usize].press = true;
+                    winit::event::WindowEvent::CloseRequested => {
+                        control_flow.set_exit();
                     }
-                    winit::event::ElementState::Released => {
-                        self.board[keyboard_input.scancode as usize].up = true;
-                        self.board[keyboard_input.scancode as usize].release = true;
-                    }
-                },
-                _ => {}
+                    _ => (),
+                }
             }
+            winit::event::Event::DeviceEvent { event, .. } => match event {
+                winit::event::DeviceEvent::Button { button, state } => {
+                    if let Some(entry) = self.mouse.get_mut(*button as usize) {
+                        match state {
+                            winit::event::ElementState::Pressed => {
+                                entry.up = false;
+                                entry.press = true;
+                            }
+                            winit::event::ElementState::Released => {
+                                entry.up = true;
+                                entry.release = true;
+                            }
+                        }
+                    }
+                }
+                winit::event::DeviceEvent::Key(keyboard_input) => {
+                    if let Some(button) = keyboard_input.virtual_keycode {
+                        match keyboard_input.state {
+                            winit::event::ElementState::Pressed => {
+                                self.board[button as usize].up = false;
+                                self.board[button as usize].press = true;
+                            }
+                            winit::event::ElementState::Released => {
+                                self.board[button as usize].up = true;
+                                self.board[button as usize].release = true;
+                            }
+                        }
+                    }
+                }
+
+                _ => {}
+            },
+            _ => {}
         }
     }
 }
@@ -383,23 +304,134 @@ pub struct InputState {
 
 //================================================================
 
-#[derive(Any)]
-#[rune(constructor)]
-pub struct Entry {
+struct Script {
+    #[allow(dead_code)]
+    handle: Vm,
+    context: Context,
+    source: Sources,
     window: Function,
     begin: Function,
     close: Function,
     frame: Function,
+    value: Option<Value>,
 }
 
-impl Entry {
-    fn new(rune: &mut Vm) -> anyhow::Result<Self> {
+impl Script {
+    fn compile_unit() -> anyhow::Result<(Context, Sources, Unit)> {
+        let mut module = Module::new();
+        module.ty::<Window>()?;
+
+        // install each module into the Rune context.
+        let mut context = rune_modules::default_context()?;
+
+        context.install(module)?;
+        context.install(crate::video::module()?)?;
+        context.install(crate::audio::module()?)?;
+        context.install(crate::input::module()?)?;
+        context.install(crate::general::module()?)?;
+        context.install(crate::file::module()?)?;
+
+        let mut source = Sources::new();
+
+        source.insert(Source::from_path("script/main.rn")?)?;
+
+        let mut diagnostics = Diagnostics::new();
+
+        let result = rune::prepare(&mut source)
+            .with_context(&context)
+            .with_diagnostics(&mut diagnostics)
+            .build();
+
+        if !diagnostics.is_empty() {
+            let mut writer = StandardStream::stderr(ColorChoice::Auto);
+            diagnostics.emit(&mut writer, &source)?;
+
+            for diagnostic in diagnostics.diagnostics() {
+                if let diagnostics::Diagnostic::Fatal(_fatal_diagnostic) = diagnostic {
+                    if Self::error("Compile Error", &_fatal_diagnostic.to_string()) {
+                        return Self::compile_unit();
+                    }
+                }
+            }
+        }
+
+        Ok((context, source, result?))
+    }
+
+    fn reload(&mut self) -> anyhow::Result<()> {
+        let mut source = Sources::new();
+
+        source.insert(Source::from_path("script/main.rn")?)?;
+
+        let mut diagnostics = Diagnostics::new();
+
+        let result = rune::prepare(&mut source)
+            .with_context(&self.context)
+            .with_diagnostics(&mut diagnostics)
+            .build();
+
+        if !diagnostics.is_empty() {
+            let mut writer = StandardStream::stderr(ColorChoice::Auto);
+            diagnostics.emit(&mut writer, &source)?;
+
+            for diagnostic in diagnostics.diagnostics() {
+                if let diagnostics::Diagnostic::Fatal(_fatal_diagnostic) = diagnostic {
+                    if Self::error("Compile Error", &_fatal_diagnostic.to_string()) {
+                        return self.reload();
+                    }
+                }
+            }
+        }
+
+        self.handle = Vm::new(Arc::new(self.context.runtime()?), Arc::new(result?));
+        self.source = source;
+        self.window = self.handle.lookup_function(["Main", "window"])?;
+        self.begin = self.handle.lookup_function(["Main", "begin"])?;
+        self.close = self.handle.lookup_function(["Main", "close"])?;
+        self.frame = self.handle.lookup_function(["Main", "frame"])?;
+
+        Ok(())
+    }
+
+    fn new() -> anyhow::Result<Self> {
+        let (context, source, unit) = Self::compile_unit()?;
+
+        let handle = Vm::new(Arc::new(context.runtime()?), Arc::new(unit));
+
         Ok(Self {
-            window: rune.lookup_function(["Main", "window"])?,
-            begin: rune.lookup_function(["Main", "begin"])?,
-            close: rune.lookup_function(["Main", "close"])?,
-            frame: rune.lookup_function(["Main", "frame"])?,
+            context,
+            window: handle.lookup_function(["Main", "window"])?,
+            begin: handle.lookup_function(["Main", "begin"])?,
+            close: handle.lookup_function(["Main", "close"])?,
+            frame: handle.lookup_function(["Main", "frame"])?,
+            value: None,
+            handle,
+            source,
         })
+    }
+
+    fn error(title: &str, error: &str) -> bool {
+        let error = format!("{error}\n\nReload script?");
+
+        let result = rfd::MessageDialog::new()
+            .set_level(rfd::MessageLevel::Error)
+            .set_title(title)
+            .set_buttons(rfd::MessageButtons::YesNo)
+            .set_description(error)
+            .show();
+
+        match result {
+            rfd::MessageDialogResult::Yes => true,
+            _ => false,
+        }
+    }
+}
+
+impl Drop for Script {
+    fn drop(&mut self) {
+        if let Some(value) = &self.value {
+            self.close.call::<()>((value,)).into_result().unwrap();
+        }
     }
 }
 

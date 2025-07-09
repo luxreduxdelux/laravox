@@ -58,7 +58,7 @@ use three_d::Srgba;
 
 //================================================================
 
-#[derive(Any, TryClone, Clone, Debug)]
+#[derive(Any, TryClone, Copy, Clone, Debug)]
 #[rune(item = ::general)]
 pub struct Vector2 {
     #[rune(get, set)]
@@ -68,6 +68,10 @@ pub struct Vector2 {
 }
 
 impl Vector2 {
+    pub fn rust_new(x: f32, y: f32) -> Self {
+        Self { x, y }
+    }
+
     #[rune::function(path = Self::new)]
     fn new(x: f32, y: f32) -> Self {
         Self { x, y }
@@ -86,6 +90,16 @@ impl Vector2 {
     #[rune::function(path = Self::y)]
     fn y(y: f32) -> Self {
         Self { x: 0.0, y }
+    }
+
+    #[rune::function(path = Self::zero)]
+    fn zero() -> Self {
+        Self { x: 0.0, y: 0.0 }
+    }
+
+    #[rune::function(path = Self::one)]
+    fn one() -> Self {
+        Self { x: 1.0, y: 1.0 }
     }
 
     #[rune::function(path = Self::dot)]
@@ -148,7 +162,7 @@ impl Vector2 {
 
 //================================================================
 
-#[derive(Any, TryClone, Clone, Debug)]
+#[derive(Any, TryClone, Copy, Clone, Debug)]
 #[rune(item = ::general)]
 pub struct Box2 {
     #[rune(get, set)]
@@ -160,6 +174,14 @@ pub struct Box2 {
 }
 
 impl Box2 {
+    pub fn rust_new(point: Vector2, scale: Vector2, angle: f32) -> Self {
+        Self {
+            point,
+            scale,
+            angle,
+        }
+    }
+
     #[rune::function(path = Self::new)]
     fn new(point: Vector2, scale: Vector2, angle: f32) -> Self {
         Self {
@@ -196,6 +218,10 @@ pub struct Color {
 }
 
 impl Color {
+    pub fn rust_new(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self { r, g, b, a }
+    }
+
     #[rune::function(path = Self::new)]
     fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self { r, g, b, a }
@@ -254,6 +280,8 @@ pub fn module() -> anyhow::Result<Module> {
     module.function_meta(Vector2::scalar)?;
     module.function_meta(Vector2::x)?;
     module.function_meta(Vector2::y)?;
+    module.function_meta(Vector2::zero)?;
+    module.function_meta(Vector2::one)?;
     module.function_meta(Vector2::dot)?;
     module.function_meta(Vector2::format)?;
     module.function_meta(Vector2::format_debug)?;
