@@ -48,15 +48,8 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-use crate::app::App;
-
-//================================================================
-
-mod app;
-mod module;
-
-//================================================================
-
-fn main() -> anyhow::Result<()> {
-    App::run()
-}
+pub mod audio;
+pub mod file;
+pub mod general;
+pub mod input;
+pub mod video;

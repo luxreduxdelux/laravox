@@ -325,11 +325,11 @@ impl Script {
         let mut context = rune_modules::default_context()?;
 
         context.install(module)?;
-        context.install(crate::video::module()?)?;
-        context.install(crate::audio::module()?)?;
-        context.install(crate::input::module()?)?;
-        context.install(crate::general::module()?)?;
-        context.install(crate::file::module()?)?;
+        context.install(crate::module::general::module()?)?;
+        context.install(crate::module::video::module()?)?;
+        context.install(crate::module::audio::module()?)?;
+        context.install(crate::module::input::module()?)?;
+        context.install(crate::module::file::module()?)?;
 
         let mut source = Sources::new();
 

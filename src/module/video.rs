@@ -50,7 +50,7 @@
 
 use crate::{
     app::State,
-    general::{Box2, Color, Vector2},
+    module::general::{Box2, Color, Vec2},
 };
 use std::sync::Arc;
 
@@ -114,8 +114,8 @@ impl Frame {
 
         let program = Program::from_source(
             &state.frame_input.context,
-            include_str!("../base.vs"),
-            include_str!("../base.fs"),
+            include_str!("../../data/base.vs"),
+            include_str!("../../data/base.fs"),
         )
         .unwrap();
 
@@ -350,7 +350,7 @@ struct Camera {
 
 impl Camera {
     #[rune::function(path = Self::new)]
-    fn new(state: &State, point: Vector2, angle: f32, zoom: f32) -> Self {
+    fn new(state: &State, point: Vec2, angle: f32, zoom: f32) -> Self {
         let mut camera = three_d::Camera::new_orthographic(
             state.frame_input.viewport,
             three_d::vec3(
@@ -390,7 +390,7 @@ struct Render {
 
 impl Render {
     #[rune::function(path = Self::new)]
-    fn new(state: &State, scale: Vector2) -> anyhow::Result<Self> {
+    fn new(state: &State, scale: Vec2) -> anyhow::Result<Self> {
         use three_d::*;
 
         let data_write = Texture2D::new_empty::<[u8; 4]>(
@@ -423,18 +423,18 @@ impl Render {
     }
 
     #[rune::function]
-    fn draw(&mut self, frame: &mut Frame, point: &Vector2) {
+    fn draw(&mut self, frame: &mut Frame, point: &Vec2) {
         frame.draw_image(
             &self.hash,
             &self.data,
             &Box2::rust_new(
-                *point,
-                Vector2::rust_new(self.data.width() as f32, self.data.height() as f32),
+                point,
+                &Vec2::rust_new(self.data.width() as f32, self.data.height() as f32),
                 0.0,
             ),
             &Box2::rust_new(
-                Vector2::rust_new(0.0, 0.0),
-                Vector2::rust_new(self.data.width() as f32, self.data.height() as f32),
+                &Vec2::rust_new(0.0, 0.0),
+                &Vec2::rust_new(self.data.width() as f32, self.data.height() as f32),
                 0.0,
             ),
             &Color::rust_new(255, 255, 255, 255),
@@ -448,8 +448,8 @@ impl Render {
             &self.data,
             box_a,
             &Box2::rust_new(
-                Vector2::rust_new(0.0, 0.0),
-                Vector2::rust_new(self.data.width() as f32, self.data.height() as f32),
+                &Vec2::rust_new(0.0, 0.0),
+                &Vec2::rust_new(self.data.width() as f32, self.data.height() as f32),
                 0.0,
             ),
             &Color::rust_new(255, 255, 255, 255),
@@ -463,8 +463,8 @@ impl Render {
             &self.data,
             box_a,
             &Box2::rust_new(
-                Vector2::rust_new(0.0, 0.0),
-                Vector2::rust_new(self.data.width() as f32, self.data.height() as f32),
+                &Vec2::rust_new(0.0, 0.0),
+                &Vec2::rust_new(self.data.width() as f32, self.data.height() as f32),
                 0.0,
             ),
             color,
@@ -483,8 +483,8 @@ impl Render {
     }
 
     #[rune::function]
-    fn scale(&self) -> Vector2 {
-        Vector2 {
+    fn scale(&self) -> Vec2 {
+        Vec2 {
             x: self.data.width() as f32,
             y: self.data.height() as f32,
         }
@@ -521,18 +521,18 @@ impl Image {
     }
 
     #[rune::function]
-    fn draw(&mut self, frame: &mut Frame, point: &Vector2) {
+    fn draw(&mut self, frame: &mut Frame, point: &Vec2) {
         frame.draw_image(
             &self.hash,
             &self.data,
             &Box2::rust_new(
-                *point,
-                Vector2::rust_new(self.data.width() as f32, self.data.height() as f32),
+                point,
+                &Vec2::rust_new(self.data.width() as f32, self.data.height() as f32),
                 0.0,
             ),
             &Box2::rust_new(
-                Vector2::rust_new(0.0, 0.0),
-                Vector2::rust_new(self.data.width() as f32, self.data.height() as f32),
+                &Vec2::rust_new(0.0, 0.0),
+                &Vec2::rust_new(self.data.width() as f32, self.data.height() as f32),
                 0.0,
             ),
             &Color::rust_new(255, 255, 255, 255),
@@ -546,8 +546,8 @@ impl Image {
             &self.data,
             box_a,
             &Box2::rust_new(
-                Vector2::rust_new(0.0, 0.0),
-                Vector2::rust_new(self.data.width() as f32, self.data.height() as f32),
+                &Vec2::rust_new(0.0, 0.0),
+                &Vec2::rust_new(self.data.width() as f32, self.data.height() as f32),
                 0.0,
             ),
             &Color::rust_new(255, 255, 255, 255),
@@ -561,8 +561,8 @@ impl Image {
             &self.data,
             box_a,
             &Box2::rust_new(
-                Vector2::rust_new(0.0, 0.0),
-                Vector2::rust_new(self.data.width() as f32, self.data.height() as f32),
+                &Vec2::rust_new(0.0, 0.0),
+                &Vec2::rust_new(self.data.width() as f32, self.data.height() as f32),
                 0.0,
             ),
             color,
@@ -581,8 +581,8 @@ impl Image {
     }
 
     #[rune::function]
-    fn scale(&self) -> Vector2 {
-        Vector2 {
+    fn scale(&self) -> Vec2 {
+        Vec2 {
             x: self.data.width() as f32,
             y: self.data.height() as f32,
         }
@@ -700,7 +700,7 @@ impl Font {
 
     #[rune::function]
     #[rustfmt::skip]
-    fn draw(&mut self, frame: &mut Frame, point: &Vector2, scale: f32, text: String) {
+    fn draw(&mut self, frame: &mut Frame, point: &Vec2, scale: f32, text: String) {
         let mut push = 0.0;
 
         let scale = scale / self.scale;
@@ -708,21 +708,21 @@ impl Font {
         for character in text.chars() {
             if let Some(glyph) = self.map.get(&character) {
                 frame.draw_image(&self.hash, &self.data, &Box2 {
-                    point: Vector2 {
+                    point: Vec2 {
                         x: point.x + push,
                         y: point.y + glyph.point.1 * scale
                     },
-                    scale: Vector2 {
+                    scale: Vec2 {
                         x: glyph.scale.0 * scale,
                         y: glyph.scale.1 * scale
                     },
                     angle: 0.0
                 }, &Box2 {
-                    point: Vector2 {
+                    point: Vec2 {
                         x: glyph.shift,
                         y: 0.0
                     },
-                    scale: Vector2 {
+                    scale: Vec2 {
                         x: glyph.scale.0,
                         y: glyph.scale.1
                     },
@@ -743,11 +743,21 @@ struct Canvas {}
 
 impl Canvas {
     #[rune::function(path = Self::scale)]
-    fn scale(state: &State) -> Vector2 {
-        Vector2::rust_new(
-            state.frame_input.viewport.width as f32,
-            state.frame_input.viewport.height as f32,
+    fn scale(state: &State) -> Vec2 {
+        Vec2::rust_new(
+            state.frame_input.window_width as f32,
+            state.frame_input.window_height as f32,
         )
+    }
+
+    #[rune::function(path = Self::time_frame)]
+    fn time_frame(state: &State) -> f64 {
+        state.frame_input.elapsed_time
+    }
+
+    #[rune::function(path = Self::time_since)]
+    fn time_since(state: &State) -> f64 {
+        state.frame_input.accumulated_time
     }
 }
 
@@ -787,6 +797,8 @@ pub fn module() -> anyhow::Result<Module> {
 
     module.ty::<Canvas>()?;
     module.function_meta(Canvas::scale)?;
+    module.function_meta(Canvas::time_frame)?;
+    module.function_meta(Canvas::time_since)?;
 
     Ok(module)
 }

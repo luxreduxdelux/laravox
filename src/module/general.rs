@@ -60,14 +60,14 @@ use three_d::Srgba;
 
 #[derive(Any, TryClone, Copy, Clone, Debug)]
 #[rune(item = ::general)]
-pub struct Vector2 {
+pub struct Vec2 {
     #[rune(get, set)]
     pub x: f32,
     #[rune(get, set)]
     pub y: f32,
 }
 
-impl Vector2 {
+impl Vec2 {
     pub fn rust_new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
@@ -166,27 +166,27 @@ impl Vector2 {
 #[rune(item = ::general)]
 pub struct Box2 {
     #[rune(get, set)]
-    pub point: Vector2,
+    pub point: Vec2,
     #[rune(get, set)]
-    pub scale: Vector2,
+    pub scale: Vec2,
     #[rune(get, set)]
     pub angle: f32,
 }
 
 impl Box2 {
-    pub fn rust_new(point: Vector2, scale: Vector2, angle: f32) -> Self {
+    pub fn rust_new(point: &Vec2, scale: &Vec2, angle: f32) -> Self {
         Self {
-            point,
-            scale,
+            point: *point,
+            scale: *scale,
             angle,
         }
     }
 
     #[rune::function(path = Self::new)]
-    fn new(point: Vector2, scale: Vector2, angle: f32) -> Self {
+    fn new(point: &Vec2, scale: &Vec2, angle: f32) -> Self {
         Self {
-            point,
-            scale,
+            point: *point,
+            scale: *scale,
             angle,
         }
     }
@@ -204,7 +204,7 @@ impl Box2 {
 
 //================================================================
 
-#[derive(Any, TryClone, Clone, Debug)]
+#[derive(Any, TryClone, Copy, Clone, Debug)]
 #[rune(item = ::general)]
 pub struct Color {
     #[rune(get, set)]
@@ -275,22 +275,22 @@ impl From<Color> for Srgba {
 pub fn module() -> anyhow::Result<Module> {
     let mut module = Module::from_meta(self::module_meta)?;
 
-    module.ty::<Vector2>()?;
-    module.function_meta(Vector2::new)?;
-    module.function_meta(Vector2::scalar)?;
-    module.function_meta(Vector2::x)?;
-    module.function_meta(Vector2::y)?;
-    module.function_meta(Vector2::zero)?;
-    module.function_meta(Vector2::one)?;
-    module.function_meta(Vector2::dot)?;
-    module.function_meta(Vector2::format)?;
-    module.function_meta(Vector2::format_debug)?;
-    module.function_meta(Vector2::add)?;
-    module.function_meta(Vector2::add_assign)?;
-    module.function_meta(Vector2::sub)?;
-    module.function_meta(Vector2::sub_assign)?;
-    module.function_meta(Vector2::mul)?;
-    module.function_meta(Vector2::mul_assign)?;
+    module.ty::<Vec2>()?;
+    module.function_meta(Vec2::new)?;
+    module.function_meta(Vec2::scalar)?;
+    module.function_meta(Vec2::x)?;
+    module.function_meta(Vec2::y)?;
+    module.function_meta(Vec2::zero)?;
+    module.function_meta(Vec2::one)?;
+    module.function_meta(Vec2::dot)?;
+    module.function_meta(Vec2::format)?;
+    module.function_meta(Vec2::format_debug)?;
+    module.function_meta(Vec2::add)?;
+    module.function_meta(Vec2::add_assign)?;
+    module.function_meta(Vec2::sub)?;
+    module.function_meta(Vec2::sub_assign)?;
+    module.function_meta(Vec2::mul)?;
+    module.function_meta(Vec2::mul_assign)?;
 
     module.ty::<Box2>()?;
     module.function_meta(Box2::new)?;
