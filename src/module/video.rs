@@ -66,12 +66,14 @@ use rune::{
 
 #[derive(Any)]
 #[rune(item = ::video)]
-struct Frame {
+pub struct Frame {
     // active batch texture.
     // UNFORTUNATELY, three_d does NOT make the texture ID public,
     // so we need a way to hash the texture somehow...that way is through
     // a string, for now. hopefully the ID is made public some day.
     image: Option<(String, Arc<three_d::Texture2D>)>,
+
+    basic: (String, Arc<three_d::Texture2D>),
 
     // active camera.
     camera: Option<three_d::Camera>,
@@ -119,8 +121,18 @@ impl Frame {
         )
         .unwrap();
 
+        let basic = CpuTexture {
+            data: TextureData::RgbaU8(vec![[255, 255, 255, 255]]),
+            width: 1,
+            height: 1,
+            ..Default::default()
+        };
+
+        let basic = Texture2D::new(&state.frame_input.context, &basic);
+
         Self {
             image: None,
+            basic: ("frame_box".to_string(), Arc::new(basic)),
             camera: None,
             main_vertex_point,
             main_texture_point,
@@ -133,14 +145,47 @@ impl Frame {
     }
 
     #[rune::function]
+    fn draw(&mut self, state: &State, camera: &Camera, render_call: Function) -> VmResult<()> {
+        use three_d::*;
+
+        let camera = camera.clone();
+
+        self.camera = Some(camera.inner);
+
+        let mut result: VmResult<()> = VmResult::Ok(());
+
+        state
+            .frame_input
+            .screen()
+            .clear(ClearState::color_and_depth(1.0, 0.0, 0.0, 1.0, 1.0))
+            .write::<CoreError>(|| {
+                // rust, fuck off
+                unsafe {
+                    let raw = self as *mut Frame;
+
+                    result = render_call.call::<()>((&mut *raw,));
+                }
+
+                self.flush();
+
+                Ok(())
+            })
+            .unwrap();
+
+        result
+    }
+
+    #[rune::function]
     fn draw_to(
         &mut self,
         state: &State,
-        mut camera: Camera,
+        camera: &Camera,
         render: &mut Render,
         render_call: Function,
     ) -> VmResult<()> {
         use three_d::*;
+
+        let mut camera = camera.clone();
 
         let viewport = Viewport::new_at_origo(render.data.width(), render.data.height());
 
@@ -200,32 +245,129 @@ impl Frame {
     }
 
     #[rune::function]
-    fn draw(&mut self, state: &State, camera: Camera, render_call: Function) -> VmResult<()> {
-        use three_d::*;
+    fn draw_box(&mut self, box_a: &Box2, color: &Color) {
+        let data = self.basic.1.clone();
 
-        self.camera = Some(camera.inner);
+        self.draw_image(
+            "frame_box",
+            &data,
+            box_a,
+            &Box2::rust_new(&Vec2::rust_new(0.0, 0.0), &Vec2::rust_new(1.0, 1.0), 0.0),
+            color,
+        );
+    }
 
-        let mut result: VmResult<()> = VmResult::Ok(());
+    #[rune::function]
+    fn draw_line(&mut self, point_a: &Vec2, point_b: &Vec2, thick: f32, color: &Color) {
+        let data = self.basic.1.clone();
 
-        state
-            .frame_input
-            .screen()
-            .clear(ClearState::color_and_depth(0.5, 0.5, 0.5, 1.0, 1.0))
-            .write::<CoreError>(|| {
-                // rust, fuck off
-                unsafe {
-                    let raw = self as *mut Frame;
+        let dx = (point_b.x - point_a.x).abs() as i32;
+        let dy = (point_b.y - point_a.y).abs() as i32 * -1;
+        let sx = if point_a.x < point_b.x { 1 } else { -1 };
+        let sy = if point_a.y < point_b.y { 1 } else { -1 };
 
-                    result = render_call.call::<()>((&mut *raw,));
+        let mut e_1 = dx + dy;
+        let mut e_2 = 0;
+
+        let mut x = point_a.x as i32;
+        let mut y = point_a.y as i32;
+
+        let f_x = point_b.x as i32;
+        let f_y = point_b.y as i32;
+
+        loop {
+            self.draw_image(
+                "frame_box",
+                &data,
+                &Box2::rust_new(
+                    &Vec2::rust_new(x as f32, y as f32),
+                    &Vec2::rust_new(thick as f32, thick as f32),
+                    0.0,
+                ),
+                &Box2::rust_new(&Vec2::rust_new(0.0, 0.0), &Vec2::rust_new(1.0, 1.0), 0.0),
+                color,
+            );
+
+            if x == f_x && y == f_y {
+                break;
+            }
+
+            e_2 = e_1 * 2;
+
+            if e_2 >= dy {
+                if x == f_x {
+                    break;
                 }
 
-                self.flush();
+                e_1 += dy;
+                x += sx;
+            }
 
-                Ok(())
-            })
-            .unwrap();
+            if e_2 <= dx {
+                if y == f_y {
+                    break;
+                }
 
-        result
+                e_1 += dx;
+                y += sy;
+            }
+        }
+    }
+
+    pub fn rust_draw_line(&mut self, point_a: &Vec2, point_b: &Vec2, thick: i32, color: &Color) {
+        let data = self.basic.1.clone();
+
+        let dx = (point_b.x - point_a.x).abs() as i32;
+        let dy = (point_b.y - point_a.y).abs() as i32 * -1;
+        let sx = if point_a.x < point_b.x { 1 } else { -1 };
+        let sy = if point_a.y < point_b.y { 1 } else { -1 };
+
+        let mut e_1 = dx + dy;
+        let mut e_2 = 0;
+
+        let mut x = point_a.x as i32;
+        let mut y = point_a.y as i32;
+
+        let f_x = point_b.x as i32;
+        let f_y = point_b.y as i32;
+
+        loop {
+            self.draw_image(
+                "frame_box",
+                &data,
+                &Box2::rust_new(
+                    &Vec2::rust_new(x as f32, y as f32),
+                    &Vec2::rust_new(thick as f32, thick as f32),
+                    0.0,
+                ),
+                &Box2::rust_new(&Vec2::rust_new(0.0, 0.0), &Vec2::rust_new(1.0, 1.0), 0.0),
+                color,
+            );
+
+            if x == f_x && y == f_y {
+                break;
+            }
+
+            e_2 = e_1 * 2;
+
+            if e_2 >= dy {
+                if x == f_x {
+                    break;
+                }
+
+                e_1 += dy;
+                x += sx;
+            }
+
+            if e_2 <= dx {
+                if y == f_y {
+                    break;
+                }
+
+                e_1 += dx;
+                y += sy;
+            }
+        }
     }
 
     fn draw_image(
@@ -350,19 +492,28 @@ struct Camera {
 
 impl Camera {
     #[rune::function(path = Self::new)]
-    fn new(state: &State, point: Vec2, angle: f32, zoom: f32) -> Self {
+    fn new(state: &State, point: &Vec2, focus: &Vec2, angle: f32, zoom: f32) -> Self {
+        let mut point = *point;
+
+        let scale = Vec2::rust_new(
+            state.frame_input.viewport.width as f32,
+            state.frame_input.viewport.height as f32,
+        );
+
+        point.x += focus.x + (scale.x - scale.x / zoom) * 0.5 * -1.0;
+        point.y += focus.y + (scale.y - scale.y / zoom) * 0.5;
+
+        let scale = Vec2::rust_new(
+            state.frame_input.viewport.width as f32 * 0.5,
+            state.frame_input.viewport.height as f32 * -0.5,
+        );
+
+        // TO-DO zoom with anchor. by default it's the center of the view-port.
+
         let mut camera = three_d::Camera::new_orthographic(
             state.frame_input.viewport,
-            three_d::vec3(
-                point.x + state.frame_input.viewport.width as f32 * 0.5,
-                point.y + state.frame_input.viewport.height as f32 * -0.5,
-                1.0,
-            ),
-            three_d::vec3(
-                point.x + state.frame_input.viewport.width as f32 * 0.5,
-                point.y + state.frame_input.viewport.height as f32 * -0.5,
-                0.0,
-            ),
+            three_d::vec3(point.x + scale.x, point.y + scale.y, 1.0),
+            three_d::vec3(point.x + scale.x, point.y + scale.y, 0.0),
             three_d::vec3(0.0, 1.0, 0.0),
             state.frame_input.viewport.height as f32,
             0.0,
@@ -591,6 +742,48 @@ impl Image {
 
 //================================================================
 
+#[derive(Any)]
+#[rune(item = ::video)]
+struct Shader {
+    #[allow(dead_code)]
+    data: Arc<three_d::Program>,
+}
+
+impl Shader {
+    #[rune::function(path = Self::new)]
+    fn new(
+        state: &State,
+        path_vs: Option<String>,
+        path_fs: Option<String>,
+    ) -> anyhow::Result<Self> {
+        use three_d::*;
+
+        let path_vs = {
+            if let Some(path_vs) = path_vs {
+                &std::fs::read_to_string(path_vs)?
+            } else {
+                include_str!("../../data/base.vs")
+            }
+        };
+
+        let path_fs = {
+            if let Some(path_fs) = path_fs {
+                &std::fs::read_to_string(path_fs)?
+            } else {
+                include_str!("../../data/base.vs")
+            }
+        };
+
+        let program = Program::from_source(&state.frame_input.context, path_vs, path_fs).unwrap();
+
+        Ok(Self {
+            data: Arc::new(program),
+        })
+    }
+}
+
+//================================================================
+
 struct Glyph {
     shift: f32,
     point: (f32, f32),
@@ -771,6 +964,8 @@ pub fn module() -> anyhow::Result<Module> {
     module.function_meta(Frame::new)?;
     module.function_meta(Frame::draw)?;
     module.function_meta(Frame::draw_to)?;
+    module.function_meta(Frame::draw_box)?;
+    module.function_meta(Frame::draw_line)?;
 
     module.ty::<Camera>()?;
     module.function_meta(Camera::new)?;

@@ -1,34 +1,33 @@
-cargo-features = ["codegen-backend"]
 [package]
-name    = "laravox"
+name = "laravox"
 version = "0.1.0"
 edition = "2024"
 
 [profile.release]
-opt-level     = 3
-lto           = true
+opt-level = 3
+lto = true
 codegen-units = 1
-panic         = "abort"
-strip         = "none"
-
-[profile.dev]
-debug = 0
+panic = "abort"
+strip = "none"
 
 [dependencies]
 # rune.
-rune          = { version = "0.14.0" }
-rune-modules  = { version = "0.14.0", features = ["full"] }
+rune = { version = "0.14.0", features = ["fmt"] }
+rune-modules = { version = "0.14.0", features = ["full"] }
 # generic error converter.
-anyhow        = { version = "1.0.98" }
+anyhow = { version = "1.0.98" }
 # three-d.
-three-d       = { version = "0.18.2" }
+three-d = { version = "0.18.2", features = ["egui-gui"] }
 three-d-asset = { version = "0.9.2", features = ["png"] }
 # sound/music play-back.
-rodio         = { version = "0.20.1" }
+rodio = { version = "0.20.1" }
 # font rasterizer.
-fontdue       = { version = "0.9.3"  }
+fontdue = { version = "0.9.3" }
 # window handler.
-winit         = { version = "0.28"   }
+winit = { version = "0.28" }
 # controller input handler.
-gilrs         = { version = "0.11.0" }
-rfd           = { version = "0.15.3" }
+gilrs = { version = "0.11.0" }
+# file dialog.
+rfd = { version = "0.15.3" }
+# world simulation.
+rapier2d = { version = "0.26.1", features = ["simd-stable", "debug-render"] }

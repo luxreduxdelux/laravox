@@ -61,6 +61,172 @@ use rune::{Any, Module};
 struct Board {}
 
 impl Board {
+    const KEY_LIST: [&str; 163] = [
+        "BOARD_KEY1",
+        "BOARD_KEY2",
+        "BOARD_KEY3",
+        "BOARD_KEY4",
+        "BOARD_KEY5",
+        "BOARD_KEY6",
+        "BOARD_KEY7",
+        "BOARD_KEY8",
+        "BOARD_KEY9",
+        "BOARD_KEY0",
+        "BOARD_A",
+        "BOARD_B",
+        "BOARD_C",
+        "BOARD_D",
+        "BOARD_E",
+        "BOARD_F",
+        "BOARD_G",
+        "BOARD_H",
+        "BOARD_I",
+        "BOARD_J",
+        "BOARD_K",
+        "BOARD_L",
+        "BOARD_M",
+        "BOARD_N",
+        "BOARD_O",
+        "BOARD_P",
+        "BOARD_Q",
+        "BOARD_R",
+        "BOARD_S",
+        "BOARD_T",
+        "BOARD_U",
+        "BOARD_V",
+        "BOARD_W",
+        "BOARD_X",
+        "BOARD_Y",
+        "BOARD_Z",
+        "BOARD_ESCAPE",
+        "BOARD_F1",
+        "BOARD_F2",
+        "BOARD_F3",
+        "BOARD_F4",
+        "BOARD_F5",
+        "BOARD_F6",
+        "BOARD_F7",
+        "BOARD_F8",
+        "BOARD_F9",
+        "BOARD_F10",
+        "BOARD_F11",
+        "BOARD_F12",
+        "BOARD_F13",
+        "BOARD_F14",
+        "BOARD_F15",
+        "BOARD_F16",
+        "BOARD_F17",
+        "BOARD_F18",
+        "BOARD_F19",
+        "BOARD_F20",
+        "BOARD_F21",
+        "BOARD_F22",
+        "BOARD_F23",
+        "BOARD_F24",
+        "BOARD_SNAPSHOT",
+        "BOARD_SCROLL",
+        "BOARD_PAUSE",
+        "BOARD_INSERT",
+        "BOARD_HOME",
+        "BOARD_DELETE",
+        "BOARD_END",
+        "BOARD_PAGEDOWN",
+        "BOARD_PAGEUP",
+        "BOARD_LEFT",
+        "BOARD_UP",
+        "BOARD_RIGHT",
+        "BOARD_DOWN",
+        "BOARD_BACK",
+        "BOARD_RETURN",
+        "BOARD_SPACE",
+        "BOARD_COMPOSE",
+        "BOARD_CARET",
+        "BOARD_NUMLOCK",
+        "BOARD_NUMPAD0",
+        "BOARD_NUMPAD1",
+        "BOARD_NUMPAD2",
+        "BOARD_NUMPAD3",
+        "BOARD_NUMPAD4",
+        "BOARD_NUMPAD5",
+        "BOARD_NUMPAD6",
+        "BOARD_NUMPAD7",
+        "BOARD_NUMPAD8",
+        "BOARD_NUMPAD9",
+        "BOARD_NUMPADADD",
+        "BOARD_NUMPADDIVIDE",
+        "BOARD_NUMPADDECIMAL",
+        "BOARD_NUMPADCOMMA",
+        "BOARD_NUMPADENTER",
+        "BOARD_NUMPADEQUALS",
+        "BOARD_NUMPADMULTIPLY",
+        "BOARD_NUMPADSUBTRACT",
+        "BOARD_ABNTC1",
+        "BOARD_ABNTC2",
+        "BOARD_APOSTROPHE",
+        "BOARD_APPS",
+        "BOARD_ASTERISK",
+        "BOARD_AT",
+        "BOARD_AX",
+        "BOARD_BACKSLASH",
+        "BOARD_CALCULATOR",
+        "BOARD_CAPITAL",
+        "BOARD_COLON",
+        "BOARD_COMMA",
+        "BOARD_CONVERT",
+        "BOARD_EQUALS",
+        "BOARD_GRAVE",
+        "BOARD_KANA",
+        "BOARD_KANJI",
+        "BOARD_LALT",
+        "BOARD_LBRACKET",
+        "BOARD_LCONTROL",
+        "BOARD_LSHIFT",
+        "BOARD_LWIN",
+        "BOARD_MAIL",
+        "BOARD_MEDIASELECT",
+        "BOARD_MEDIASTOP",
+        "BOARD_MINUS",
+        "BOARD_MUTE",
+        "BOARD_MYCOMPUTER",
+        "BOARD_NAVIGATEFORWARD",
+        "BOARD_NAVIGATEBACKWARD",
+        "BOARD_NEXTTRACK",
+        "BOARD_NOCONVERT",
+        "BOARD_OEM102",
+        "BOARD_PERIOD",
+        "BOARD_PLAYPAUSE",
+        "BOARD_PLUS",
+        "BOARD_POWER",
+        "BOARD_PREVTRACK",
+        "BOARD_RALT",
+        "BOARD_RBRACKET",
+        "BOARD_RCONTROL",
+        "BOARD_RSHIFT",
+        "BOARD_RWIN",
+        "BOARD_SEMICOLON",
+        "BOARD_SLASH",
+        "BOARD_SLEEP",
+        "BOARD_STOP",
+        "BOARD_SYSRQ",
+        "BOARD_TAB",
+        "BOARD_UNDERLINE",
+        "BOARD_UNLABELED",
+        "BOARD_VOLUMEDOWN",
+        "BOARD_VOLUMEUP",
+        "BOARD_WAKE",
+        "BOARD_WEBBACK",
+        "BOARD_WEBFAVORITES",
+        "BOARD_WEBFORWARD",
+        "BOARD_WEBHOME",
+        "BOARD_WEBREFRESH",
+        "BOARD_WEBSEARCH",
+        "BOARD_WEBSTOP",
+        "BOARD_YEN",
+        "BOARD_COPY",
+        "BOARD_PASTE",
+        "BOARD_CUT",
+    ];
+
     fn get_index(state: &State, index: usize) -> anyhow::Result<&InputState> {
         if let Some(button) = state.frame_state.board.get(index) {
             Ok(button)
@@ -74,13 +240,13 @@ impl Board {
     #[rune::function(path = Self::up)]
     /// Get the state of a key-board input (up).
     fn up(state: &State, index: usize) -> anyhow::Result<bool> {
-        Ok(Self::get_index(state, index)?.up)
+        Ok(!Self::get_index(state, index)?.down)
     }
 
     #[rune::function(path = Self::down)]
     /// Get the state of a key-board input (down).
     fn down(state: &State, index: usize) -> anyhow::Result<bool> {
-        Ok(!Self::get_index(state, index)?.up)
+        Ok(Self::get_index(state, index)?.down)
     }
 
     #[rune::function(path = Self::press)]
@@ -116,13 +282,13 @@ impl Mouse {
     #[rune::function(path = Self::up)]
     /// Get the state of a mouse input (up).
     fn up(state: &State, index: usize) -> anyhow::Result<bool> {
-        Ok(Self::get_index(state, index)?.up)
+        Ok(!Self::get_index(state, index)?.down)
     }
 
     #[rune::function(path = Self::down)]
     /// Get the state of a mouse input (down).
     fn down(state: &State, index: usize) -> anyhow::Result<bool> {
-        Ok(!Self::get_index(state, index)?.up)
+        Ok(Self::get_index(state, index)?.down)
     }
 
     #[rune::function(path = Self::press)]
@@ -149,6 +315,10 @@ pub fn module() -> anyhow::Result<Module> {
     module.function_meta(Board::down)?;
     module.function_meta(Board::press)?;
     module.function_meta(Board::release)?;
+
+    for (i, key) in Board::KEY_LIST.iter().enumerate() {
+        module.constant(key, i).build()?;
+    }
 
     module.ty::<Mouse>()?;
     module.function_meta(Mouse::up)?;

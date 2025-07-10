@@ -51,7 +51,7 @@
 use rune::{
     Any, Context, Diagnostics, Module, Source, Sources, Unit, Value, Vm, diagnostics,
     runtime::{Function, VmResult},
-    termcolor::{ColorChoice, StandardStream},
+    termcolor::{Buffer, ColorChoice, StandardStream},
 };
 use std::sync::Arc;
 use three_d::{FrameInputGenerator, SurfaceSettings, WindowedContext};
@@ -127,13 +127,66 @@ impl App {
         // load window.
         let (context, event_loop, window) = Self::load_window(&script)?;
 
+        let mut interface = three_d::GUI::new(&context);
+
         let mut frame_state = FrameState::new();
         let mut frame_input_generator = FrameInputGenerator::from_winit_window(&window);
+        let mut rune_error = None;
 
         event_loop.run(move |event, _, control_flow| {
-            match event {
-                winit::event::Event::MainEventsCleared => {
-                    let frame_input = frame_input_generator.generate(&context);
+            if event == winit::event::Event::MainEventsCleared {
+                let mut frame_input = frame_input_generator.generate(&context);
+
+                if let Some(error) = &rune_error {
+                    let mut click = false;
+
+                    interface.update(
+                        &mut frame_input.events,
+                        frame_input.accumulated_time,
+                        frame_input.viewport,
+                        frame_input.device_pixel_ratio,
+                        |context| {
+                            use three_d::egui::*;
+
+                            CentralPanel::default().show(context, |ui| {
+                                ui.heading("Script Error");
+                                ui.separator();
+                                ui.label(RichText::new(error).monospace());
+                                ui.separator();
+
+                                if ui
+                                    .button("Rebuild Script")
+                                    .on_hover_text("Rebuild the source code, preserving state.")
+                                    .clicked()
+                                {
+                                    script.reload().unwrap();
+                                    click = true;
+                                }
+
+                                if ui
+                                    .button("Restart Script")
+                                    .on_hover_text("Restart the entire VM, losing all state.")
+                                    .clicked()
+                                {
+                                    script = Script::new().unwrap();
+                                    click = true;
+                                }
+
+                                if ui.button("Exit").clicked() {
+                                    control_flow.set_exit();
+                                }
+                            });
+                        },
+                    );
+
+                    if click {
+                        rune_error = None;
+                    }
+
+                    frame_input.screen().write(|| interface.render()).unwrap();
+
+                    context.swap_buffers().unwrap();
+                } else {
                     let state = State::new(frame_input.clone(), frame_state, handle.clone());
 
                     if script.value.is_none() {
@@ -157,22 +210,33 @@ impl App {
                                 // restart.
                                 script = Script::new().unwrap();
                             }
+
+                            context.swap_buffers().unwrap();
                         }
                         VmResult::Err(error) => {
-                            let mut writer = StandardStream::stderr(ColorChoice::Auto);
-                            error.emit(&mut writer, &script.source).unwrap();
+                            //let mut writer = StandardStream::stderr(ColorChoice::Auto);
+                            let mut color = Buffer::ansi();
+                            let mut no_color = Buffer::no_color();
+                            error.emit(&mut color, &script.source).unwrap();
+                            error.emit(&mut no_color, &script.source).unwrap();
 
+                            let color = String::from_utf8(color.into_inner()).unwrap();
+                            let no_color = String::from_utf8(no_color.into_inner()).unwrap();
+
+                            println!("{color}");
+
+                            rune_error = Some(no_color);
+
+                            /*
                             if Script::error("Script Error", &error.to_string()) {
                                 script = Script::new().unwrap();
                             } else {
                                 control_flow.set_exit();
                             }
+                            */
                         }
                     }
-
-                    context.swap_buffers().unwrap();
                 }
-                _ => {}
             }
 
             frame_state.process(&event, &context, &mut frame_input_generator, control_flow);
@@ -263,11 +327,11 @@ impl FrameState {
                     if let Some(entry) = self.mouse.get_mut(*button as usize) {
                         match state {
                             winit::event::ElementState::Pressed => {
-                                entry.up = false;
+                                entry.down = true;
                                 entry.press = true;
                             }
                             winit::event::ElementState::Released => {
-                                entry.up = true;
+                                entry.down = false;
                                 entry.release = true;
                             }
                         }
@@ -277,11 +341,11 @@ impl FrameState {
                     if let Some(button) = keyboard_input.virtual_keycode {
                         match keyboard_input.state {
                             winit::event::ElementState::Pressed => {
-                                self.board[button as usize].up = false;
+                                self.board[button as usize].down = true;
                                 self.board[button as usize].press = true;
                             }
                             winit::event::ElementState::Released => {
-                                self.board[button as usize].up = true;
+                                self.board[button as usize].down = false;
                                 self.board[button as usize].release = true;
                             }
                         }
@@ -297,7 +361,7 @@ impl FrameState {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct InputState {
-    pub up: bool,
+    pub down: bool,
     pub press: bool,
     pub release: bool,
 }
@@ -330,6 +394,7 @@ impl Script {
         context.install(crate::module::audio::module()?)?;
         context.install(crate::module::input::module()?)?;
         context.install(crate::module::file::module()?)?;
+        context.install(crate::module::physical::module()?)?;
 
         let mut source = Sources::new();
 
@@ -337,20 +402,25 @@ impl Script {
 
         let mut diagnostics = Diagnostics::new();
 
+        //rune::fmt::prepare();
+
         let result = rune::prepare(&mut source)
             .with_context(&context)
             .with_diagnostics(&mut diagnostics)
             .build();
 
         if !diagnostics.is_empty() {
-            let mut writer = StandardStream::stderr(ColorChoice::Auto);
+            let mut writer = Buffer::no_color();
+            //let mut writer = StandardStream::stderr(ColorChoice::Auto);
             diagnostics.emit(&mut writer, &source)?;
 
-            for diagnostic in diagnostics.diagnostics() {
-                if let diagnostics::Diagnostic::Fatal(_fatal_diagnostic) = diagnostic {
-                    if Self::error("Compile Error", &_fatal_diagnostic.to_string()) {
-                        return Self::compile_unit();
-                    }
+            let text = String::from_utf8(writer.into_inner())?;
+
+            println!("{text}");
+
+            if diagnostics.has_error() {
+                if Self::error("Compile Error", &text) {
+                    return Self::compile_unit();
                 }
             }
         }
