@@ -52,6 +52,7 @@ use crate::script::*;
 
 //================================================================
 
+use notify::{EventKind, event};
 use rodio::OutputStreamHandle;
 use rune::Any;
 use three_d::{
@@ -68,6 +69,7 @@ use winit::{
 
 #[derive(Any)]
 pub struct System {
+    #[allow(dead_code)]
     window: Window,
     handle: WindowedContext,
     event: EventLoop<()>,
@@ -77,8 +79,9 @@ pub struct System {
 
 impl System {
     pub fn new(window: crate::script::Window) -> anyhow::Result<Self> {
+        // TO-DO actually use script window content.
         let mut window_builder = WindowBuilder::new()
-            .with_title(window.title)
+            .with_title(window.name)
             .with_inner_size(LogicalSize::new(window.scale.0, window.scale.1));
 
         if let Some(min_scale) = window.min_scale {
@@ -91,12 +94,18 @@ impl System {
                 window_builder.with_max_inner_size(LogicalSize::new(max_scale.0, max_scale.1));
         }
 
+        let surface = SurfaceSettings {
+            vsync: window.sync,
+            ..Default::default()
+        };
+
         let event = EventLoop::new();
         let window = window_builder.build(&event)?;
-        let handle =
-            WindowedContext::from_winit_window(&window, SurfaceSettings::default()).unwrap();
+        let handle = WindowedContext::from_winit_window(&window, surface)?;
         let frame = FrameInputGenerator::from_winit_window(&window);
         let interface = GUI::new(&handle);
+
+        window.is_minimized();
 
         Ok(Self {
             window,
@@ -116,7 +125,30 @@ impl System {
                 winit::event::Event::MainEventsCleared => {
                     let mut frame = self.frame.generate(&self.handle);
 
+                    if let Some(handle) = &script.handle {
+                        if let Some((_, rx)) = &handle.watcher {
+                            if let Ok(event) = rx.try_recv() {
+                                match event {
+                                    Ok(event) => {
+                                        if event.kind
+                                            == EventKind::Access(event::AccessKind::Close(
+                                                event::AccessMode::Write,
+                                            ))
+                                        {
+                                            script.rebuild();
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+
                     if let Some(error) = &script.error {
+                        let mut rebuild = false;
+                        let mut restart = false;
+                        let mut exit = false;
+
                         self.interface.update(
                             &mut frame.events,
                             frame.accumulated_time,
@@ -124,7 +156,20 @@ impl System {
                             frame.device_pixel_ratio,
                             |context| {
                                 three_d::egui::CentralPanel::default().show(context, |ui| {
+                                    context.input(|reader| {
+                                        if reader.key_pressed(three_d::egui::Key::Num1) {
+                                            rebuild = true;
+                                        }
+                                        if reader.key_pressed(three_d::egui::Key::Num2) {
+                                            restart = true;
+                                        }
+                                        if reader.key_pressed(three_d::egui::Key::Escape) {
+                                            exit = true;
+                                        }
+                                    });
+
                                     ui.heading("Script Error");
+
                                     ui.separator();
 
                                     three_d::egui::ScrollArea::vertical()
@@ -132,9 +177,34 @@ impl System {
                                         .show(ui, |ui| ui.label(RichText::new(error).monospace()));
 
                                     ui.separator();
-                                    ui.button("Rebuild");
-                                    ui.button("Restart");
-                                    ui.button("Exit");
+
+                                    if ui
+                                        .button("Rebuild")
+                                        .on_hover_text(
+                                            "[Number 1] Rebuild the source code, preserving state.",
+                                        )
+                                        .clicked()
+                                    {
+                                        rebuild = true;
+                                    };
+
+                                    if ui
+                                        .button("Restart")
+                                        .on_hover_text(
+                                            "[Number 2] Restart the virtual machine, losing state.",
+                                        )
+                                        .clicked()
+                                    {
+                                        restart = true;
+                                    };
+
+                                    if ui
+                                        .button("Exit")
+                                        .on_hover_text("[Escape] Exit Laravox.")
+                                        .clicked()
+                                    {
+                                        exit = true;
+                                    };
                                 });
                             },
                         );
@@ -144,9 +214,27 @@ impl System {
                             .clear(ClearState::color_and_depth(0.0, 0.0, 0.0, 1.0, 1.0))
                             .write(|| self.interface.render())
                             .unwrap();
+
+                        if rebuild {
+                            script.rebuild();
+                        }
+                        if restart {
+                            let mut state = State::new(frame, input, audio.clone());
+                            script.restart(&mut state);
+                        }
+                        if exit {
+                            control_flow.set_exit();
+                        }
                     } else {
-                        let state = State::new(frame, input, audio.clone());
-                        script.frame(&state);
+                        let mut state = State::new(frame, input, audio.clone());
+                        let frame = script.frame(&mut state);
+
+                        match frame {
+                            1 => control_flow.set_exit(),
+                            2 => script.rebuild(),
+                            3 => script.restart(&mut state),
+                            _ => {}
+                        }
                     }
 
                     self.handle.swap_buffers().unwrap();

@@ -48,19 +48,29 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use rune::{
-    Any, Context, Diagnostics, FromValue, Module, Source, Sources, Value, Vm,
+    Any,
+    Context,
+    Diagnostics,
+    FromValue,
+    Module,
+    Source,
+    Sources,
+    Value,
+    Vm,
+    //compile::ErrorKind,
     runtime::{Function, GuardedArgs},
     termcolor::{Buffer, ColorChoice, StandardStream},
 };
-use std::sync::Arc;
+use std::sync::{Arc, mpsc::Receiver};
 
 //================================================================
 
 pub struct Script {
     /// Rune virtual machine handle.
     #[allow(dead_code)]
-    handle: Option<Handle>,
+    pub handle: Option<Handle>,
     /// Rune context.
     #[allow(dead_code)]
     context: Context,
@@ -106,27 +116,24 @@ impl Script {
     }
 
     pub fn window(&mut self) -> Window {
+        let window = Window::default();
+
         // we have a handle to the Rune VM.
         if let Some(handle) = &self.handle {
             // call the window entry-point.
-            match handle.safe_call(&handle.window, ()) {
-                Ok(value) => {
-                    // all clear, return window.
-                    value
-                }
+            match handle.safe_call(&handle.window, (window,)) {
+                Ok(value) => return value,
                 Err(error) => {
                     // error in entry-point, return default window.
                     self.error = Some(error.to_string());
-                    Window::default()
                 }
             }
-        } else {
-            // return default window.
-            Window::default()
         }
+
+        Window::default()
     }
 
-    fn begin(&mut self, state: &crate::system::State) {
+    fn begin(&mut self, state: &mut crate::system::State) {
         if let Some(handle) = &self.handle {
             match handle.safe_call(&handle.begin, (state,)) {
                 Ok(value) => {
@@ -139,11 +146,11 @@ impl Script {
         }
     }
 
-    pub fn frame(&mut self, state: &crate::system::State) {
+    pub fn frame(&mut self, state: &mut crate::system::State) -> usize {
         if let Some(handle) = &self.handle {
             if let Some(value) = &self.value {
                 match handle.safe_call(&handle.frame, (value, state)) {
-                    Ok(value) => value,
+                    Ok(value) => return value,
                     Err(error) => {
                         self.error = Some(error.to_string());
                     }
@@ -152,6 +159,8 @@ impl Script {
                 self.begin(state);
             }
         }
+
+        0
     }
 
     pub fn close(&mut self) {
@@ -166,11 +175,31 @@ impl Script {
             }
         }
     }
+
+    pub fn rebuild(&mut self) {
+        self.error = None;
+
+        match Handle::new(&self.context) {
+            Ok(value) => self.handle = Some(value),
+            Err(error) => self.error = Some(error.to_string()),
+        }
+    }
+
+    pub fn restart(&mut self, state: &mut crate::system::State) {
+        self.error = None;
+
+        match Handle::new(&self.context) {
+            Ok(value) => self.handle = Some(value),
+            Err(error) => self.error = Some(error.to_string()),
+        }
+
+        self.begin(state);
+    }
 }
 
 //================================================================
 
-struct Handle {
+pub struct Handle {
     /// Rune virtual machine.
     #[allow(dead_code)]
     handle: Vm,
@@ -184,6 +213,10 @@ struct Handle {
     frame: Function,
     /// entry-point function; Rune state destructor.
     close: Function,
+    pub watcher: Option<(
+        RecommendedWatcher,
+        Receiver<Result<notify::Event, notify::Error>>,
+    )>,
 }
 
 impl Handle {
@@ -226,6 +259,26 @@ impl Handle {
 
         //================================================================
 
+        // create a file-system path watcher.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
+        let mut watcher_list = watcher.paths_mut();
+        let mut watcher_find = 0;
+
+        // iterate through the list of each source file found in the compile stage.
+        while let Some(source) = source.get(rune::SourceId::new(watcher_find)) {
+            if let Some(path) = source.path() {
+                // watch source file.
+                watcher_list.add(path, RecursiveMode::NonRecursive)?;
+            }
+
+            watcher_find += 1;
+        }
+
+        watcher_list.commit()?;
+
+        //================================================================
+
         // create Rune virtual machine.
         let handle = Vm::new(Arc::new(context.runtime()?), Arc::new(unit?));
 
@@ -236,6 +289,7 @@ impl Handle {
             frame: handle.lookup_function([Self::MAIN_NAME, Self::CALL_FRAME])?,
             close: handle.lookup_function([Self::MAIN_NAME, Self::CALL_CLOSE])?,
             handle,
+            watcher: Some((watcher, rx)),
         })
     }
 
@@ -264,23 +318,51 @@ impl Handle {
 //================================================================
 
 #[derive(Any)]
-#[rune(constructor)]
 pub struct Window {
-    pub title: String,
+    #[rune(get, set)]
+    pub name: String,
+    #[rune(get, set)]
+    pub icon: Option<String>,
+    #[rune(get, set)]
     pub min_scale: Option<(u32, u32)>,
+    #[rune(get, set)]
     pub max_scale: Option<(u32, u32)>,
+    #[rune(get, set)]
     pub scale: (u32, u32),
+    #[rune(get, set)]
+    pub head: bool,
+    #[rune(get, set)]
     pub sync: bool,
+    #[rune(get, set)]
+    pub full: bool,
+    #[rune(get, set)]
+    pub decor: bool,
+    #[rune(get, set)]
+    pub resize: bool,
+    #[rune(get, set)]
+    pub hidden: bool,
+    #[rune(get, set)]
+    pub minimize: bool,
+    #[rune(get, set)]
+    pub maximize: bool,
 }
 
 impl Default for Window {
     fn default() -> Self {
         Self {
-            title: "Laravox".to_string(),
+            name: "Laravox".to_string(),
+            icon: None,
             min_scale: None,
             max_scale: None,
             scale: (1024, 768),
+            head: true,
             sync: true,
+            full: false,
+            decor: true,
+            resize: true,
+            hidden: false,
+            minimize: false,
+            maximize: false,
         }
     }
 }
