@@ -49,8 +49,8 @@
 */
 
 use crate::{
-    app::State,
     module::general::{Box2, Color, Vec2},
+    system::State,
 };
 use std::sync::Arc;
 
@@ -110,12 +110,12 @@ impl Frame {
         let side_texture_color = Vec::with_capacity(1024);
 
         // initialize each GPU buffer.
-        let main_vertex_point  = VertexBuffer::new_with_data(&state.frame_input.context, &side_vertex_point);
-        let main_texture_point = VertexBuffer::new_with_data(&state.frame_input.context, &side_texture_point);
-        let main_texture_color = VertexBuffer::new_with_data(&state.frame_input.context, &side_texture_color);
+        let main_vertex_point  = VertexBuffer::new_with_data(&state.frame.context, &side_vertex_point);
+        let main_texture_point = VertexBuffer::new_with_data(&state.frame.context, &side_texture_point);
+        let main_texture_color = VertexBuffer::new_with_data(&state.frame.context, &side_texture_color);
 
         let program = Program::from_source(
-            &state.frame_input.context,
+            &state.frame.context,
             include_str!("../../data/base.vs"),
             include_str!("../../data/base.fs"),
         )
@@ -128,7 +128,7 @@ impl Frame {
             ..Default::default()
         };
 
-        let basic = Texture2D::new(&state.frame_input.context, &basic);
+        let basic = Texture2D::new(&state.frame.context, &basic);
 
         Self {
             image: None,
@@ -155,7 +155,7 @@ impl Frame {
         let mut result: VmResult<()> = VmResult::Ok(());
 
         state
-            .frame_input
+            .frame
             .screen()
             .clear(ClearState::color_and_depth(1.0, 0.0, 0.0, 1.0, 1.0))
             .write::<CoreError>(|| {
@@ -239,7 +239,7 @@ impl Frame {
         };
 
         // TO-DO there's probably a better way to go about this...
-        render.data = Arc::new(Texture2D::new(&state.frame_input.context, &texture));
+        render.data = Arc::new(Texture2D::new(&state.frame.context, &texture));
 
         value
     }
@@ -496,26 +496,26 @@ impl Camera {
         let mut point = *point;
 
         let scale = Vec2::rust_new(
-            state.frame_input.viewport.width as f32,
-            state.frame_input.viewport.height as f32,
+            state.frame.viewport.width as f32,
+            state.frame.viewport.height as f32,
         );
 
-        point.x += focus.x + (scale.x - scale.x / zoom) * 0.5 * -1.0;
-        point.y += focus.y + (scale.y - scale.y / zoom) * 0.5;
+        //point.x += focus.x + (scale.x - scale.x / zoom) * 0.5 * -1.0;
+        //point.y += focus.y + (scale.y - scale.y / zoom) * 0.5;
 
         let scale = Vec2::rust_new(
-            state.frame_input.viewport.width as f32 * 0.5,
-            state.frame_input.viewport.height as f32 * -0.5,
+            state.frame.viewport.width as f32 * 0.5,
+            state.frame.viewport.height as f32 * -0.5,
         );
 
         // TO-DO zoom with anchor. by default it's the center of the view-port.
 
         let mut camera = three_d::Camera::new_orthographic(
-            state.frame_input.viewport,
+            state.frame.viewport,
             three_d::vec3(point.x + scale.x, point.y + scale.y, 1.0),
             three_d::vec3(point.x + scale.x, point.y + scale.y, 0.0),
             three_d::vec3(0.0, 1.0, 0.0),
-            state.frame_input.viewport.height as f32,
+            state.frame.viewport.height as f32,
             0.0,
             10.0,
         );
@@ -545,7 +545,7 @@ impl Render {
         use three_d::*;
 
         let data_write = Texture2D::new_empty::<[u8; 4]>(
-            &state.frame_input.context,
+            &state.frame.context,
             scale.x as u32,
             scale.y as u32,
             Interpolation::Nearest,
@@ -556,7 +556,7 @@ impl Render {
         );
 
         let data = Arc::new(Texture2D::new_empty::<[u8; 4]>(
-            &state.frame_input.context,
+            &state.frame.context,
             scale.x as u32,
             scale.y as u32,
             Interpolation::Nearest,
@@ -663,7 +663,7 @@ impl Image {
         texture.min_filter = Interpolation::Nearest;
         texture.mag_filter = Interpolation::Nearest;
 
-        let texture = Texture2D::new(&state.frame_input.context, &texture);
+        let texture = Texture2D::new(&state.frame.context, &texture);
 
         Ok(Self {
             data: Arc::new(texture),
@@ -774,7 +774,7 @@ impl Shader {
             }
         };
 
-        let program = Program::from_source(&state.frame_input.context, path_vs, path_fs).unwrap();
+        let program = Program::from_source(&state.frame.context, path_vs, path_fs).unwrap();
 
         Ok(Self {
             data: Arc::new(program),
@@ -881,7 +881,7 @@ impl Font {
             ..Default::default()
         };
 
-        let data = Arc::new(Texture2D::new(&state.frame_input.context, &data));
+        let data = Arc::new(Texture2D::new(&state.frame.context, &data));
 
         Ok(Self {
             map,
@@ -938,19 +938,19 @@ impl Canvas {
     #[rune::function(path = Self::scale)]
     fn scale(state: &State) -> Vec2 {
         Vec2::rust_new(
-            state.frame_input.window_width as f32,
-            state.frame_input.window_height as f32,
+            state.frame.window_width as f32,
+            state.frame.window_height as f32,
         )
     }
 
     #[rune::function(path = Self::time_frame)]
     fn time_frame(state: &State) -> f64 {
-        state.frame_input.elapsed_time
+        state.frame.elapsed_time
     }
 
     #[rune::function(path = Self::time_since)]
     fn time_since(state: &State) -> f64 {
-        state.frame_input.accumulated_time
+        state.frame.accumulated_time
     }
 }
 

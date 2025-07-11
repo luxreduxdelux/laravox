@@ -48,7 +48,7 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-use crate::app::{InputState, State};
+use crate::system::{Button, State};
 
 //================================================================
 
@@ -227,8 +227,8 @@ impl Board {
         "BOARD_CUT",
     ];
 
-    fn get_index(state: &State, index: usize) -> anyhow::Result<&InputState> {
-        if let Some(button) = state.frame_state.board.get(index) {
+    fn get_index(state: &State, index: usize) -> anyhow::Result<&Button> {
+        if let Some(button) = state.input.board.get(index) {
             Ok(button)
         } else {
             Err(anyhow::Error::msg(format!(
@@ -269,8 +269,8 @@ impl Board {
 struct Mouse {}
 
 impl Mouse {
-    fn get_index(state: &State, index: usize) -> anyhow::Result<&InputState> {
-        if let Some(button) = state.frame_state.mouse.get(index) {
+    fn get_index(state: &State, index: usize) -> anyhow::Result<&Button> {
+        if let Some(button) = state.input.mouse.get(index) {
             Ok(button)
         } else {
             Err(anyhow::Error::msg(format!(

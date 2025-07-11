@@ -48,7 +48,7 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-use crate::app::State;
+use crate::system::State;
 
 //================================================================
 
@@ -69,7 +69,7 @@ impl Sound {
     #[rune::function(path = Self::new)]
     fn new(state: &State, path: &str) -> anyhow::Result<Self> {
         let data = std::fs::read(path)?;
-        let sink = rodio::Sink::try_new(&state.audio_entry)?;
+        let sink = rodio::Sink::try_new(&state.audio)?;
 
         Ok(Self {
             data: SoundData(Arc::new(data)),

@@ -48,15 +48,21 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-use crate::app::App;
+mod module;
+mod script;
+mod system;
 
 //================================================================
 
-mod app;
-mod module;
+use crate::{script::*, system::*};
 
 //================================================================
 
 fn main() -> anyhow::Result<()> {
-    App::run()
+    let mut script = Script::new()?;
+    let system = System::new(script.window())?;
+
+    system.run(script);
+
+    Ok(())
 }
