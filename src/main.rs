@@ -62,7 +62,5 @@ fn main() -> anyhow::Result<()> {
     let mut script = Script::new()?;
     let system = System::new(script.window())?;
 
-    system.run(script);
-
-    Ok(())
+    system.run(script)
 }

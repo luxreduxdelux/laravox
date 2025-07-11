@@ -52,6 +52,7 @@ use crate::script::*;
 
 //================================================================
 
+use notify::{EventKind, event};
 use rodio::OutputStreamHandle;
 use rune::Any;
 use three_d::{
@@ -68,6 +69,7 @@ use winit::{
 
 #[derive(Any)]
 pub struct System {
+    #[allow(dead_code)]
     window: Window,
     handle: WindowedContext,
     event: EventLoop<()>,
@@ -116,7 +118,30 @@ impl System {
                 winit::event::Event::MainEventsCleared => {
                     let mut frame = self.frame.generate(&self.handle);
 
+                    if let Some(handle) = &script.handle {
+                        if let Some((_, rx)) = &handle.watcher {
+                            if let Ok(event) = rx.try_recv() {
+                                match event {
+                                    Ok(event) => {
+                                        if event.kind
+                                            == EventKind::Access(event::AccessKind::Close(
+                                                event::AccessMode::Write,
+                                            ))
+                                        {
+                                            script.rebuild();
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+
                     if let Some(error) = &script.error {
+                        let mut rebuild = false;
+                        let mut restart = false;
+                        let mut exit = false;
+
                         self.interface.update(
                             &mut frame.events,
                             frame.accumulated_time,
@@ -124,7 +149,20 @@ impl System {
                             frame.device_pixel_ratio,
                             |context| {
                                 three_d::egui::CentralPanel::default().show(context, |ui| {
+                                    context.input(|reader| {
+                                        if reader.key_pressed(three_d::egui::Key::Num1) {
+                                            rebuild = true;
+                                        }
+                                        if reader.key_pressed(three_d::egui::Key::Num2) {
+                                            restart = true;
+                                        }
+                                        if reader.key_pressed(three_d::egui::Key::Escape) {
+                                            exit = true;
+                                        }
+                                    });
+
                                     ui.heading("Script Error");
+
                                     ui.separator();
 
                                     three_d::egui::ScrollArea::vertical()
@@ -132,9 +170,34 @@ impl System {
                                         .show(ui, |ui| ui.label(RichText::new(error).monospace()));
 
                                     ui.separator();
-                                    ui.button("Rebuild");
-                                    ui.button("Restart");
-                                    ui.button("Exit");
+
+                                    if ui
+                                        .button("Rebuild")
+                                        .on_hover_text(
+                                            "[Number 1] Rebuild the source code, preserving state.",
+                                        )
+                                        .clicked()
+                                    {
+                                        rebuild = true;
+                                    };
+
+                                    if ui
+                                        .button("Restart")
+                                        .on_hover_text(
+                                            "[Number 2] Restart the virtual machine, losing state.",
+                                        )
+                                        .clicked()
+                                    {
+                                        restart = true;
+                                    };
+
+                                    if ui
+                                        .button("Exit")
+                                        .on_hover_text("[Escape] Exit Laravox.")
+                                        .clicked()
+                                    {
+                                        exit = true;
+                                    };
                                 });
                             },
                         );
@@ -144,9 +207,27 @@ impl System {
                             .clear(ClearState::color_and_depth(0.0, 0.0, 0.0, 1.0, 1.0))
                             .write(|| self.interface.render())
                             .unwrap();
+
+                        if rebuild {
+                            script.rebuild();
+                        }
+                        if restart {
+                            let state = State::new(frame, input, audio.clone());
+                            script.restart(&state);
+                        }
+                        if exit {
+                            control_flow.set_exit();
+                        }
                     } else {
                         let state = State::new(frame, input, audio.clone());
-                        script.frame(&state);
+                        let frame = script.frame(&state);
+
+                        match frame {
+                            1 => control_flow.set_exit(),
+                            2 => script.rebuild(),
+                            3 => script.restart(&state),
+                            _ => {}
+                        }
                     }
 
                     self.handle.swap_buffers().unwrap();

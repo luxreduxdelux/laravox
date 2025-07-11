@@ -31,3 +31,4 @@ gilrs         = { version = "0.11.0" }
 rfd           = { version = "0.15.3" }
 # world simulation.
 rapier2d      = { version = "0.26.1", features = ["simd-stable", "debug-render"] }
+notify = "8.1.0"

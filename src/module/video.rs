@@ -267,7 +267,7 @@ impl Frame {
         let sy = if point_a.y < point_b.y { 1 } else { -1 };
 
         let mut e_1 = dx + dy;
-        let mut e_2 = 0;
+        let mut e_2;
 
         let mut x = point_a.x as i32;
         let mut y = point_a.y as i32;
@@ -500,8 +500,8 @@ impl Camera {
             state.frame.viewport.height as f32,
         );
 
-        //point.x += focus.x + (scale.x - scale.x / zoom) * 0.5 * -1.0;
-        //point.y += focus.y + (scale.y - scale.y / zoom) * 0.5;
+        point.x += focus.x + (scale.x - scale.x / zoom) * 0.5 * -1.0;
+        point.y += focus.y + (scale.y - scale.y / zoom) * 0.5;
 
         let scale = Vec2::rust_new(
             state.frame.viewport.width as f32 * 0.5,

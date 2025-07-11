@@ -48,19 +48,32 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+use notify::{Config, Event, PollWatcher, RecommendedWatcher, RecursiveMode, Watcher};
 use rune::{
-    Any, Context, Diagnostics, FromValue, Module, Source, Sources, Value, Vm,
+    Any,
+    Context,
+    Diagnostics,
+    FromValue,
+    Module,
+    Source,
+    Sources,
+    Value,
+    Vm,
+    //compile::ErrorKind,
     runtime::{Function, GuardedArgs},
     termcolor::{Buffer, ColorChoice, StandardStream},
 };
-use std::sync::Arc;
+use std::{
+    path::Path,
+    sync::{Arc, mpsc::Receiver},
+};
 
 //================================================================
 
 pub struct Script {
     /// Rune virtual machine handle.
     #[allow(dead_code)]
-    handle: Option<Handle>,
+    pub handle: Option<Handle>,
     /// Rune context.
     #[allow(dead_code)]
     context: Context,
@@ -139,11 +152,11 @@ impl Script {
         }
     }
 
-    pub fn frame(&mut self, state: &crate::system::State) {
+    pub fn frame(&mut self, state: &crate::system::State) -> usize {
         if let Some(handle) = &self.handle {
             if let Some(value) = &self.value {
                 match handle.safe_call(&handle.frame, (value, state)) {
-                    Ok(value) => value,
+                    Ok(value) => return value,
                     Err(error) => {
                         self.error = Some(error.to_string());
                     }
@@ -152,6 +165,8 @@ impl Script {
                 self.begin(state);
             }
         }
+
+        0
     }
 
     pub fn close(&mut self) {
@@ -166,11 +181,31 @@ impl Script {
             }
         }
     }
+
+    pub fn rebuild(&mut self) {
+        self.error = None;
+
+        match Handle::new(&self.context) {
+            Ok(value) => self.handle = Some(value),
+            Err(error) => self.error = Some(error.to_string()),
+        }
+    }
+
+    pub fn restart(&mut self, state: &crate::system::State) {
+        self.error = None;
+
+        match Handle::new(&self.context) {
+            Ok(value) => self.handle = Some(value),
+            Err(error) => self.error = Some(error.to_string()),
+        }
+
+        self.begin(state);
+    }
 }
 
 //================================================================
 
-struct Handle {
+pub struct Handle {
     /// Rune virtual machine.
     #[allow(dead_code)]
     handle: Vm,
@@ -184,6 +219,10 @@ struct Handle {
     frame: Function,
     /// entry-point function; Rune state destructor.
     close: Function,
+    pub watcher: Option<(
+        RecommendedWatcher,
+        Receiver<Result<notify::Event, notify::Error>>,
+    )>,
 }
 
 impl Handle {
@@ -226,6 +265,41 @@ impl Handle {
 
         //================================================================
 
+        let mut path_list = Vec::new();
+        let mut path_find = 0;
+
+        loop {
+            // get every source file from compilation.
+            if let Some(source) = source.get(rune::SourceId::new(path_find)) {
+                // if the source file has a path, push it.
+                if let Some(path) = source.path() {
+                    path_list.push(path);
+                }
+
+                path_find += 1;
+            } else {
+                break;
+            }
+        }
+
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        // Automatically select the best implementation for your platform.
+        // You can also access each implementation directly e.g. INotifyWatcher.
+        let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
+
+        // Add a path to be watched. All files and directories at that path and
+        // below will be monitored for changes.
+        let mut watch_path = watcher.paths_mut();
+
+        for path in path_list {
+            watch_path.add(path, RecursiveMode::NonRecursive)?;
+        }
+
+        watch_path.commit()?;
+
+        //================================================================
+
         // create Rune virtual machine.
         let handle = Vm::new(Arc::new(context.runtime()?), Arc::new(unit?));
 
@@ -236,6 +310,7 @@ impl Handle {
             frame: handle.lookup_function([Self::MAIN_NAME, Self::CALL_FRAME])?,
             close: handle.lookup_function([Self::MAIN_NAME, Self::CALL_CLOSE])?,
             handle,
+            watcher: Some((watcher, rx)),
         })
     }
 
