@@ -52,8 +52,6 @@ use crate::script::*;
 
 //================================================================
 
-use notify::{EventKind, event};
-use rodio::OutputStreamHandle;
 use rune::Any;
 use three_d::{
     ClearState, FrameInput, FrameInputGenerator, GUI, SurfaceSettings, WindowedContext,
@@ -61,7 +59,7 @@ use three_d::{
 };
 use winit::{
     dpi::LogicalSize,
-    event_loop::{ControlFlow, EventLoop},
+    event_loop::EventLoop,
     window::{Window, WindowBuilder},
 };
 
@@ -84,14 +82,14 @@ impl System {
             .with_title(window.name)
             .with_inner_size(LogicalSize::new(window.scale.0, window.scale.1));
 
-        if let Some(min_scale) = window.min_scale {
+        if let Some(scale_min) = window.scale_min {
             window_builder =
-                window_builder.with_min_inner_size(LogicalSize::new(min_scale.0, min_scale.1));
+                window_builder.with_min_inner_size(LogicalSize::new(scale_min.0, scale_min.1));
         }
 
-        if let Some(max_scale) = window.max_scale {
+        if let Some(scale_max) = window.scale_max {
             window_builder =
-                window_builder.with_max_inner_size(LogicalSize::new(max_scale.0, max_scale.1));
+                window_builder.with_max_inner_size(LogicalSize::new(scale_max.0, scale_max.1));
         }
 
         let surface = SurfaceSettings {
@@ -105,8 +103,6 @@ impl System {
         let frame = FrameInputGenerator::from_winit_window(&window);
         let interface = GUI::new(&handle);
 
-        window.is_minimized();
-
         Ok(Self {
             window,
             handle,
@@ -117,272 +113,126 @@ impl System {
     }
 
     pub fn run(mut self, mut script: Script) -> anyhow::Result<()> {
-        let mut input = Input::default();
-        let (_stream, audio) = rodio::OutputStream::try_default()?;
-
         self.event.run(move |event, _, control_flow| {
-            match event {
-                winit::event::Event::MainEventsCleared => {
-                    let mut frame = self.frame.generate(&self.handle);
+            if event == winit::event::Event::MainEventsCleared {
+                let mut frame = self.frame.generate(&self.handle);
 
-                    if let Some(handle) = &script.handle {
-                        if let Some((_, rx)) = &handle.watcher {
-                            if let Ok(event) = rx.try_recv() {
-                                match event {
-                                    Ok(event) => {
-                                        if event.kind
-                                            == EventKind::Access(event::AccessKind::Close(
-                                                event::AccessMode::Write,
-                                            ))
-                                        {
-                                            script.rebuild();
-                                        }
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
+                script.watch();
+
+                if let Some(error) = &script.error {
+                    let (rebuild, restart, exit) =
+                        Self::error(&mut self.interface, &mut frame, error);
+
+                    if rebuild {
+                        script.rebuild();
                     }
-
-                    if let Some(error) = &script.error {
-                        let mut rebuild = false;
-                        let mut restart = false;
-                        let mut exit = false;
-
-                        self.interface.update(
-                            &mut frame.events,
-                            frame.accumulated_time,
-                            frame.viewport,
-                            frame.device_pixel_ratio,
-                            |context| {
-                                three_d::egui::CentralPanel::default().show(context, |ui| {
-                                    context.input(|reader| {
-                                        if reader.key_pressed(three_d::egui::Key::Num1) {
-                                            rebuild = true;
-                                        }
-                                        if reader.key_pressed(three_d::egui::Key::Num2) {
-                                            restart = true;
-                                        }
-                                        if reader.key_pressed(three_d::egui::Key::Escape) {
-                                            exit = true;
-                                        }
-                                    });
-
-                                    ui.heading("Script Error");
-
-                                    ui.separator();
-
-                                    three_d::egui::ScrollArea::vertical()
-                                        .max_height(frame.viewport.height as f32 - 120.0)
-                                        .show(ui, |ui| ui.label(RichText::new(error).monospace()));
-
-                                    ui.separator();
-
-                                    if ui
-                                        .button("Rebuild")
-                                        .on_hover_text(
-                                            "[Number 1] Rebuild the source code, preserving state.",
-                                        )
-                                        .clicked()
-                                    {
-                                        rebuild = true;
-                                    };
-
-                                    if ui
-                                        .button("Restart")
-                                        .on_hover_text(
-                                            "[Number 2] Restart the virtual machine, losing state.",
-                                        )
-                                        .clicked()
-                                    {
-                                        restart = true;
-                                    };
-
-                                    if ui
-                                        .button("Exit")
-                                        .on_hover_text("[Escape] Exit Laravox.")
-                                        .clicked()
-                                    {
-                                        exit = true;
-                                    };
-                                });
-                            },
-                        );
-
-                        frame
-                            .screen()
-                            .clear(ClearState::color_and_depth(0.0, 0.0, 0.0, 1.0, 1.0))
-                            .write(|| self.interface.render())
-                            .unwrap();
-
-                        if rebuild {
-                            script.rebuild();
-                        }
-                        if restart {
-                            let mut state = State::new(frame, input, audio.clone());
-                            script.restart(&mut state);
-                        }
-                        if exit {
-                            control_flow.set_exit();
-                        }
-                    } else {
-                        let mut state = State::new(frame, input, audio.clone());
-                        let frame = script.frame(&mut state);
-
-                        match frame {
-                            1 => control_flow.set_exit(),
-                            2 => script.rebuild(),
-                            3 => script.restart(&mut state),
-                            _ => {}
-                        }
+                    if restart {
+                        script.restart(frame);
                     }
-
-                    self.handle.swap_buffers().unwrap();
+                    if exit {
+                        control_flow.set_exit();
+                    }
+                } else {
+                    script.frame(frame, control_flow);
                 }
-                winit::event::Event::WindowEvent { ref event, .. } => {
-                    self.frame.handle_winit_window_event(event);
 
-                    match event {
-                        winit::event::WindowEvent::Resized(physical_size) => {
-                            self.handle.resize(*physical_size);
-                        }
-                        winit::event::WindowEvent::ScaleFactorChanged {
-                            new_inner_size, ..
-                        } => {
-                            self.handle.resize(**new_inner_size);
-                        }
-                        winit::event::WindowEvent::CloseRequested => {
-                            control_flow.set_exit();
-                        }
-                        _ => (),
-                    }
-                }
-                _ => {}
+                self.handle
+                    .swap_buffers()
+                    .expect("System::run(): Error swapping frame buffer.");
             }
 
-            input.process(&event, &self.handle, &mut self.frame, control_flow);
-        });
-    }
-}
+            if let winit::event::Event::WindowEvent { ref event, .. } = event {
+                self.frame.handle_winit_window_event(&event);
 
-//================================================================
-
-#[derive(Any)]
-pub struct State {
-    /// OpenGL handle.
-    pub frame: FrameInput,
-    /// input handle for window/device event data.
-    pub input: Input,
-    /// audio handle for audio sink creation.
-    pub audio: OutputStreamHandle,
-}
-
-impl State {
-    fn new(frame: FrameInput, input: Input, audio: OutputStreamHandle) -> Self {
-        Self {
-            frame,
-            input,
-            audio,
-        }
-    }
-}
-
-//================================================================
-
-#[derive(Clone, Copy)]
-pub struct Input {
-    pub board: [Button; Self::BUTTON_COUNT_BOARD],
-    pub mouse: [Button; Self::BUTTON_COUNT_MOUSE],
-}
-
-impl Input {
-    // this has to match the VirtualKeyCode count in winit.
-    const BUTTON_COUNT_BOARD: usize = 163;
-    // don't actually know what the total mouse button count is.
-    const BUTTON_COUNT_MOUSE: usize = 16;
-
-    fn process(
-        &mut self,
-        event: &winit::event::Event<()>,
-        context: &WindowedContext,
-        generator: &mut FrameInputGenerator,
-        control_flow: &mut ControlFlow,
-    ) {
-        for button in &mut self.board {
-            button.press = false;
-            button.release = false;
-        }
-
-        for button in &mut self.mouse {
-            button.press = false;
-            button.release = false;
-        }
-
-        match event {
-            winit::event::Event::WindowEvent { event, .. } => {
-                generator.handle_winit_window_event(event);
                 match event {
                     winit::event::WindowEvent::Resized(physical_size) => {
-                        context.resize(*physical_size);
+                        self.handle.resize(*physical_size);
                     }
                     winit::event::WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        context.resize(**new_inner_size);
+                        self.handle.resize(**new_inner_size);
                     }
                     winit::event::WindowEvent::CloseRequested => {
                         control_flow.set_exit();
                     }
-                    _ => (),
+                    _ => {}
                 }
             }
-            winit::event::Event::DeviceEvent { event, .. } => match event {
-                winit::event::DeviceEvent::Button { button, state } => {
-                    if let Some(entry) = self.mouse.get_mut(*button as usize) {
-                        match state {
-                            winit::event::ElementState::Pressed => {
-                                entry.down = true;
-                                entry.press = true;
-                            }
-                            winit::event::ElementState::Released => {
-                                entry.down = false;
-                                entry.release = true;
-                            }
-                        }
-                    }
-                }
-                winit::event::DeviceEvent::Key(keyboard_input) => {
-                    if let Some(button) = keyboard_input.virtual_keycode {
-                        match keyboard_input.state {
-                            winit::event::ElementState::Pressed => {
-                                self.board[button as usize].down = true;
-                                self.board[button as usize].press = true;
-                            }
-                            winit::event::ElementState::Released => {
-                                self.board[button as usize].down = false;
-                                self.board[button as usize].release = true;
-                            }
-                        }
-                    }
-                }
 
-                _ => {}
+            if let Some(state) = &mut script.state {
+                state
+                    .input
+                    .process(&event, &mut self.window, &mut self.frame);
+            }
+        });
+    }
+
+    fn error(interface: &mut GUI, frame: &mut FrameInput, error: &str) -> (bool, bool, bool) {
+        let mut rebuild = false;
+        let mut restart = false;
+        let mut exit = false;
+
+        interface.update(
+            &mut frame.events,
+            frame.accumulated_time,
+            frame.viewport,
+            frame.device_pixel_ratio,
+            |context| {
+                three_d::egui::CentralPanel::default().show(context, |ui| {
+                    context.input(|reader| {
+                        if reader.key_pressed(three_d::egui::Key::Num1) {
+                            rebuild = true;
+                        }
+                        if reader.key_pressed(three_d::egui::Key::Num2) {
+                            restart = true;
+                        }
+                        if reader.key_pressed(three_d::egui::Key::Escape) {
+                            exit = true;
+                        }
+                    });
+
+                    ui.heading("Script Error");
+
+                    ui.separator();
+
+                    three_d::egui::ScrollArea::vertical()
+                        .max_height(frame.viewport.height as f32 - 120.0)
+                        .show(ui, |ui| ui.label(RichText::new(error).monospace()));
+
+                    ui.separator();
+
+                    if ui
+                        .button("Rebuild")
+                        .on_hover_text("[Number 1] Rebuild the source code, preserving state.")
+                        .clicked()
+                    {
+                        rebuild = true;
+                    };
+
+                    if ui
+                        .button("Restart")
+                        .on_hover_text("[Number 2] Restart the virtual machine, losing state.")
+                        .clicked()
+                    {
+                        restart = true;
+                    };
+
+                    if ui
+                        .button("Exit")
+                        .on_hover_text("[Escape] Exit Laravox.")
+                        .clicked()
+                    {
+                        exit = true;
+                    };
+                });
             },
-            _ => {}
-        }
-    }
-}
+        );
 
-impl Default for Input {
-    fn default() -> Self {
-        Self {
-            board: [Button::default(); Self::BUTTON_COUNT_BOARD],
-            mouse: [Button::default(); Self::BUTTON_COUNT_MOUSE],
-        }
-    }
-}
+        frame
+            .screen()
+            .clear(ClearState::color_and_depth(0.0, 0.0, 0.0, 1.0, 1.0))
+            .write(|| interface.render())
+            .expect("System::error(): Error on UI render.");
 
-#[derive(Clone, Copy, Default)]
-pub struct Button {
-    pub down: bool,
-    pub press: bool,
-    pub release: bool,
+        (rebuild, restart, exit)
+    }
 }

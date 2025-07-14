@@ -48,11 +48,13 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-use crate::system::{Button, State};
+use crate::script::{Button, State};
 
 //================================================================
 
 use rune::{Any, Module};
+
+use super::general::Vec2;
 
 //================================================================
 
@@ -227,8 +229,25 @@ impl Board {
         "BOARD_CUT",
     ];
 
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::up)?;
+        module.function_meta(Self::down)?;
+        module.function_meta(Self::press)?;
+        module.function_meta(Self::release)?;
+
+        for (i, key) in Self::KEY_LIST.iter().enumerate() {
+            module.constant(key, i).build()?;
+        }
+
+        Ok(())
+    }
+
+    //================================================================
+
     fn get_index(state: &State, index: usize) -> anyhow::Result<&Button> {
-        if let Some(button) = state.input.board.get(index) {
+        if let Some(button) = state.input.board.data.get(index) {
             Ok(button)
         } else {
             Err(anyhow::Error::msg(format!(
@@ -269,8 +288,23 @@ impl Board {
 struct Mouse {}
 
 impl Mouse {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::up)?;
+        module.function_meta(Self::down)?;
+        module.function_meta(Self::press)?;
+        module.function_meta(Self::release)?;
+        module.function_meta(Self::point)?;
+        module.function_meta(Self::wheel)?;
+
+        Ok(())
+    }
+
+    //================================================================
+
     fn get_index(state: &State, index: usize) -> anyhow::Result<&Button> {
-        if let Some(button) = state.input.mouse.get(index) {
+        if let Some(button) = state.input.mouse.data.get(index) {
             Ok(button)
         } else {
             Err(anyhow::Error::msg(format!(
@@ -302,6 +336,16 @@ impl Mouse {
     fn release(state: &State, index: usize) -> anyhow::Result<bool> {
         Ok(Self::get_index(state, index)?.release)
     }
+
+    #[rune::function(path = Self::point)]
+    fn point(state: &State) -> Vec2 {
+        state.input.mouse.point
+    }
+
+    #[rune::function(path = Self::wheel)]
+    fn wheel(state: &State) -> Vec2 {
+        state.input.mouse.wheel
+    }
 }
 
 //================================================================
@@ -310,21 +354,8 @@ impl Mouse {
 pub fn module() -> anyhow::Result<Module> {
     let mut module = Module::from_meta(self::module_meta)?;
 
-    module.ty::<Board>()?;
-    module.function_meta(Board::up)?;
-    module.function_meta(Board::down)?;
-    module.function_meta(Board::press)?;
-    module.function_meta(Board::release)?;
-
-    for (i, key) in Board::KEY_LIST.iter().enumerate() {
-        module.constant(key, i).build()?;
-    }
-
-    module.ty::<Mouse>()?;
-    module.function_meta(Mouse::up)?;
-    module.function_meta(Mouse::down)?;
-    module.function_meta(Mouse::press)?;
-    module.function_meta(Mouse::release)?;
+    Board::module(&mut module)?;
+    Mouse::module(&mut module)?;
 
     Ok(module)
 }

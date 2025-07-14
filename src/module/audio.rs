@@ -48,7 +48,7 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-use crate::system::State;
+use crate::script::State;
 
 //================================================================
 
@@ -66,10 +66,21 @@ struct Sound {
 }
 
 impl Sound {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::new)?;
+        module.function_meta(Self::play)?;
+
+        Ok(())
+    }
+
+    //================================================================
+
     #[rune::function(path = Self::new)]
     fn new(state: &State, path: &str) -> anyhow::Result<Self> {
         let data = std::fs::read(path)?;
-        let sink = rodio::Sink::try_new(&state.audio)?;
+        let sink = rodio::Sink::try_new(&state.audio.1)?;
 
         Ok(Self {
             data: SoundData(Arc::new(data)),
@@ -103,9 +114,7 @@ impl AsRef<[u8]> for SoundData {
 pub fn module() -> anyhow::Result<Module> {
     let mut module = Module::from_meta(self::module_meta)?;
 
-    module.ty::<Sound>()?;
-    module.function_meta(Sound::new)?;
-    module.function_meta(Sound::play)?;
+    Sound::module(&mut module)?;
 
     Ok(module)
 }

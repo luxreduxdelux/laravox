@@ -61,16 +61,40 @@ use three_d::Srgba;
 #[derive(Any, TryClone, Copy, Clone, Debug)]
 #[rune(item = ::general)]
 pub struct Vec2 {
-    #[rune(get, set)]
+    #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
     pub x: f32,
-    #[rune(get, set)]
+    #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
     pub y: f32,
 }
 
 impl Vec2 {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::new)?;
+        module.function_meta(Self::scalar)?;
+        module.function_meta(Self::x)?;
+        module.function_meta(Self::y)?;
+        module.function_meta(Self::zero)?;
+        module.function_meta(Self::one)?;
+        module.function_meta(Self::dot)?;
+        module.function_meta(Self::format)?;
+        module.function_meta(Self::format_debug)?;
+        module.function_meta(Self::add)?;
+        module.function_meta(Self::add_assign)?;
+        module.function_meta(Self::sub)?;
+        module.function_meta(Self::sub_assign)?;
+        module.function_meta(Self::mul)?;
+        module.function_meta(Self::mul_assign)?;
+
+        Ok(())
+    }
+
     pub fn rust_new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
+
+    //================================================================
 
     #[rune::function(path = Self::new)]
     fn new(x: f32, y: f32) -> Self {
@@ -165,15 +189,25 @@ impl Vec2 {
 #[derive(Any, TryClone, Copy, Clone, Debug)]
 #[rune(item = ::general)]
 pub struct Box2 {
-    #[rune(get, set)]
+    #[rune(get, set, copy)]
     pub point: Vec2,
-    #[rune(get, set)]
+    #[rune(get, set, copy)]
     pub scale: Vec2,
-    #[rune(get, set)]
+    #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
     pub angle: f32,
 }
 
 impl Box2 {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::new)?;
+        module.function_meta(Self::format)?;
+        module.function_meta(Self::format_debug)?;
+
+        Ok(())
+    }
+
     pub fn rust_new(point: &Vec2, scale: &Vec2, angle: f32) -> Self {
         Self {
             point: *point,
@@ -181,6 +215,8 @@ impl Box2 {
             angle,
         }
     }
+
+    //================================================================
 
     #[rune::function(path = Self::new)]
     fn new(point: &Vec2, scale: &Vec2, angle: f32) -> Self {
@@ -218,9 +254,23 @@ pub struct Color {
 }
 
 impl Color {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::new)?;
+        module.function_meta(Self::format)?;
+        module.function_meta(Self::format_debug)?;
+        module.function_meta(Self::white)?;
+        module.function_meta(Self::black)?;
+
+        Ok(())
+    }
+
     pub fn rust_new(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self { r, g, b, a }
     }
+
+    //================================================================
 
     #[rune::function(path = Self::new)]
     fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
@@ -275,34 +325,9 @@ impl From<Color> for Srgba {
 pub fn module() -> anyhow::Result<Module> {
     let mut module = Module::from_meta(self::module_meta)?;
 
-    module.ty::<Vec2>()?;
-    module.function_meta(Vec2::new)?;
-    module.function_meta(Vec2::scalar)?;
-    module.function_meta(Vec2::x)?;
-    module.function_meta(Vec2::y)?;
-    module.function_meta(Vec2::zero)?;
-    module.function_meta(Vec2::one)?;
-    module.function_meta(Vec2::dot)?;
-    module.function_meta(Vec2::format)?;
-    module.function_meta(Vec2::format_debug)?;
-    module.function_meta(Vec2::add)?;
-    module.function_meta(Vec2::add_assign)?;
-    module.function_meta(Vec2::sub)?;
-    module.function_meta(Vec2::sub_assign)?;
-    module.function_meta(Vec2::mul)?;
-    module.function_meta(Vec2::mul_assign)?;
-
-    module.ty::<Box2>()?;
-    module.function_meta(Box2::new)?;
-    module.function_meta(Box2::format)?;
-    module.function_meta(Box2::format_debug)?;
-
-    module.ty::<Color>()?;
-    module.function_meta(Color::new)?;
-    module.function_meta(Color::format)?;
-    module.function_meta(Color::format_debug)?;
-    module.function_meta(Color::white)?;
-    module.function_meta(Color::black)?;
+    Vec2::module(&mut module)?;
+    Box2::module(&mut module)?;
+    Color::module(&mut module)?;
 
     Ok(module)
 }

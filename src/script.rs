@@ -48,7 +48,9 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
+use crate::module::general::Vec2;
+use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher, event};
+use rodio::{OutputStream, OutputStreamHandle};
 use rune::{
     Any,
     Context,
@@ -64,6 +66,8 @@ use rune::{
     termcolor::{Buffer, ColorChoice, StandardStream},
 };
 use std::sync::{Arc, mpsc::Receiver};
+use three_d::{FrameInput, FrameInputGenerator};
+use winit::event_loop::ControlFlow;
 
 //================================================================
 
@@ -76,6 +80,8 @@ pub struct Script {
     context: Context,
     /// Rune state.
     value: Option<Value>,
+    /// Rust state.
+    pub state: Option<State>,
     /// Rune error.
     pub error: Option<String>,
 }
@@ -111,6 +117,7 @@ impl Script {
             handle,
             context,
             value: None,
+            state: None,
             error,
         })
     }
@@ -133,9 +140,11 @@ impl Script {
         Window::default()
     }
 
-    fn begin(&mut self, state: &mut crate::system::State) {
+    fn begin(&mut self, frame: FrameInput) {
         if let Some(handle) = &self.handle {
-            match handle.safe_call(&handle.begin, (state,)) {
+            let mut state = State::new(frame);
+
+            match handle.safe_call(&handle.begin, (&mut state,)) {
                 Ok(value) => {
                     self.value = Some(value);
                 }
@@ -143,24 +152,33 @@ impl Script {
                     self.error = Some(error.to_string());
                 }
             }
+
+            self.state = Some(state);
         }
     }
 
-    pub fn frame(&mut self, state: &mut crate::system::State) -> usize {
+    pub fn frame(&mut self, frame: FrameInput, control_flow: &mut ControlFlow) {
         if let Some(handle) = &self.handle {
-            if let Some(value) = &self.value {
+            if let Some(value) = &self.value
+                && let Some(state) = &mut self.state
+            {
+                state.frame = frame.clone();
+
                 match handle.safe_call(&handle.frame, (value, state)) {
-                    Ok(value) => return value,
+                    Ok(value) => match value {
+                        1 => control_flow.set_exit(),
+                        2 => self.rebuild(),
+                        3 => self.restart(frame),
+                        _ => {}
+                    },
                     Err(error) => {
                         self.error = Some(error.to_string());
                     }
-                }
+                };
             } else {
-                self.begin(state);
+                self.begin(frame);
             }
         }
-
-        0
     }
 
     pub fn close(&mut self) {
@@ -185,7 +203,7 @@ impl Script {
         }
     }
 
-    pub fn restart(&mut self, state: &mut crate::system::State) {
+    pub fn restart(&mut self, frame: FrameInput) {
         self.error = None;
 
         match Handle::new(&self.context) {
@@ -193,7 +211,18 @@ impl Script {
             Err(error) => self.error = Some(error.to_string()),
         }
 
-        self.begin(state);
+        self.begin(frame);
+    }
+
+    pub fn watch(&mut self) {
+        if let Some(handle) = &self.handle
+            && let Some((_, rx)) = &handle.watcher
+            && let Ok(Ok(event)) = rx.try_recv()
+            && event.kind == EventKind::Access(event::AccessKind::Close(event::AccessMode::Write))
+        {
+            println!("rebuild!");
+            self.rebuild();
+        }
     }
 }
 
@@ -213,7 +242,8 @@ pub struct Handle {
     frame: Function,
     /// entry-point function; Rune state destructor.
     close: Function,
-    pub watcher: Option<(
+    /// source file watcher.
+    watcher: Option<(
         RecommendedWatcher,
         Receiver<Result<notify::Event, notify::Error>>,
     )>,
@@ -324,9 +354,9 @@ pub struct Window {
     #[rune(get, set)]
     pub icon: Option<String>,
     #[rune(get, set)]
-    pub min_scale: Option<(u32, u32)>,
+    pub scale_min: Option<(u32, u32)>,
     #[rune(get, set)]
-    pub max_scale: Option<(u32, u32)>,
+    pub scale_max: Option<(u32, u32)>,
     #[rune(get, set)]
     pub scale: (u32, u32),
     #[rune(get, set)]
@@ -352,8 +382,8 @@ impl Default for Window {
         Self {
             name: "Laravox".to_string(),
             icon: None,
-            min_scale: None,
-            max_scale: None,
+            scale_min: None,
+            scale_max: None,
             scale: (1024, 768),
             head: true,
             sync: true,
@@ -365,4 +395,279 @@ impl Default for Window {
             maximize: false,
         }
     }
+}
+
+//================================================================
+
+#[derive(Any)]
+pub struct State {
+    /// OpenGL handle.
+    pub frame: FrameInput,
+    /// input handle for window/device event data.
+    pub input: Input,
+    /// audio handle for audio sink creation.
+    pub audio: (OutputStream, OutputStreamHandle),
+}
+
+impl State {
+    fn new(frame: FrameInput) -> Self {
+        let (stream, handle) = rodio::OutputStream::try_default().unwrap();
+
+        Self {
+            frame,
+            input: Input::default(),
+            audio: (stream, handle),
+        }
+    }
+}
+
+//================================================================
+
+#[derive(Default)]
+pub struct Input {
+    pub board: Board,
+    pub mouse: Mouse,
+    pub window_get: WindowGet,
+    pub window_set: WindowSet,
+}
+
+impl Input {
+    // this has to match the VirtualKeyCode count in winit.
+    const BUTTON_COUNT_BOARD: usize = 163;
+    // don't actually know what the total mouse button count is.
+    const BUTTON_COUNT_MOUSE: usize = 16;
+
+    pub fn process(
+        &mut self,
+        event: &winit::event::Event<()>,
+        window: &mut winit::window::Window,
+        generator: &mut FrameInputGenerator,
+    ) {
+        self.handle_state(window);
+
+        if let winit::event::Event::WindowEvent { event, .. } = event {
+            generator.handle_winit_window_event(event);
+
+            match event {
+                winit::event::WindowEvent::Resized(physical_size) => {
+                    self.window_get.maximize = window.is_maximized();
+                    self.window_get.full = window.fullscreen().is_some();
+
+                    self.window_get.scale = Some(Vec2::rust_new(
+                        physical_size.width as f32,
+                        physical_size.height as f32,
+                    ));
+                }
+                winit::event::WindowEvent::Moved(physical_position) => {
+                    self.window_get.point = Some(Vec2::rust_new(
+                        physical_position.x as f32,
+                        physical_position.y as f32,
+                    ));
+                }
+                winit::event::WindowEvent::Focused(focus) => {
+                    if let Some(minimize) = window.is_minimized() {
+                        self.window_get.minimize = minimize;
+                    }
+
+                    self.window_get.focus = *focus;
+                }
+                winit::event::WindowEvent::KeyboardInput { input, .. } => {
+                    if let Some(button) = input.virtual_keycode {
+                        match input.state {
+                            winit::event::ElementState::Pressed => {
+                                self.board.data[button as usize].down = true;
+                                self.board.data[button as usize].press = true;
+                            }
+                            winit::event::ElementState::Released => {
+                                self.board.data[button as usize].down = false;
+                                self.board.data[button as usize].release = true;
+                            }
+                        }
+                    }
+                }
+                winit::event::WindowEvent::CursorMoved { position, .. } => {
+                    self.mouse.point.x = position.x as f32;
+                    self.mouse.point.y = position.y as f32;
+                }
+                winit::event::WindowEvent::CursorEntered { .. } => {
+                    self.mouse.state = Some(true);
+                }
+                winit::event::WindowEvent::CursorLeft { .. } => {
+                    self.mouse.state = Some(false);
+                }
+                winit::event::WindowEvent::MouseWheel { delta, .. } => {
+                    let (x, y) = match delta {
+                        winit::event::MouseScrollDelta::LineDelta(x, y) => (*x, *y),
+                        winit::event::MouseScrollDelta::PixelDelta(physical_position) => {
+                            (physical_position.x as f32, physical_position.y as f32)
+                        }
+                    };
+
+                    self.mouse.wheel.x = x;
+                    self.mouse.wheel.y = y;
+                }
+                winit::event::WindowEvent::MouseInput { state, button, .. } => {
+                    let button = match button {
+                        winit::event::MouseButton::Left => 0,
+                        winit::event::MouseButton::Right => 1,
+                        winit::event::MouseButton::Middle => 2,
+                        winit::event::MouseButton::Other(index) => *index as usize,
+                    };
+
+                    if let Some(entry) = self.mouse.data.get_mut(button) {
+                        match state {
+                            winit::event::ElementState::Pressed => {
+                                entry.down = true;
+                                entry.press = true;
+                            }
+                            winit::event::ElementState::Released => {
+                                entry.down = false;
+                                entry.release = true;
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn handle_state(&mut self, window: &mut winit::window::Window) {
+        // minimize the window.
+        if self.window_set.minimize.is_some() {
+            window.set_minimized(true);
+            self.window_set.minimize = None;
+        }
+
+        // maximize the window.
+        if self.window_set.maximize.is_some() {
+            window.set_maximized(true);
+            self.window_set.minimize = None;
+        }
+
+        // focus the window.
+        if self.window_set.focus.is_some() {
+            window.focus_window();
+            self.window_set.focus = None;
+        }
+
+        // focus the window.
+        if let Some(name) = &self.window_set.name {
+            window.set_title(name);
+            self.window_set.name = None;
+        }
+
+        // go full-screen, or back to window mode.
+        if let Some(full) = self.window_set.full {
+            if full {
+                window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+            } else {
+                window.set_fullscreen(None);
+            }
+
+            self.window_set.full = None;
+        }
+
+        // reset all previous board state.
+        for button in &mut self.board.data {
+            button.press = false;
+            button.release = false;
+        }
+
+        // reset all previous mouse state.
+        for button in &mut self.mouse.data {
+            button.press = false;
+            button.release = false;
+        }
+
+        self.mouse.wheel.x = 0.0;
+        self.mouse.wheel.y = 0.0;
+        self.mouse.state = None;
+
+        // reset all previous window state.
+        self.window_get.point = None;
+        self.window_get.scale = None;
+    }
+}
+
+pub struct Board {
+    // board button data.
+    pub data: [Button; Input::BUTTON_COUNT_BOARD],
+}
+
+impl Default for Board {
+    fn default() -> Self {
+        Self {
+            data: [Button::default(); Input::BUTTON_COUNT_BOARD],
+        }
+    }
+}
+
+pub struct Mouse {
+    /// mouse button data.
+    pub data: [Button; Input::BUTTON_COUNT_MOUSE],
+    /// mouse wheel data (delta).
+    pub wheel: Vec2,
+    /// mouse cursor window enter-leave state.
+    pub state: Option<bool>,
+    /// mouse cursor point.
+    pub point: Vec2,
+}
+
+impl Default for Mouse {
+    fn default() -> Self {
+        Self {
+            data: [Button::default(); Input::BUTTON_COUNT_MOUSE],
+            wheel: Vec2::rust_new(0.0, 0.0),
+            state: None,
+            point: Vec2::rust_new(0.0, 0.0),
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct WindowGet {
+    /// is the window minimized?
+    pub minimize: bool,
+    /// is the window maximized?
+    pub maximize: bool,
+    /// is the window focused?
+    pub focus: bool,
+    /// has the window point been modified?
+    pub point: Option<Vec2>,
+    /// has the window scale been modified?
+    pub scale: Option<Vec2>,
+    /// is the window full-screen?
+    pub full: bool,
+}
+
+#[derive(Default)]
+pub struct WindowSet {
+    /// minimize the window.
+    pub minimize: Option<()>,
+    /// maximize the window.
+    pub maximize: Option<()>,
+    /// focus the window.
+    pub focus: Option<()>,
+    /// set the window point.
+    pub point: Option<Vec2>,
+    /// set the window name.
+    pub name: Option<String>,
+    /// set the window icon.
+    pub icon: Option<String>,
+    /// set the minimum window scale.
+    pub scale_min: Option<Vec2>,
+    /// set the maximum window scale.
+    pub scale_max: Option<Vec2>,
+    /// set the window scale.
+    pub scale: Option<Vec2>,
+    /// go full-screen, or window mode.
+    pub full: Option<bool>,
+}
+
+#[derive(Copy, Clone, Default)]
+pub struct Button {
+    pub down: bool,
+    pub press: bool,
+    pub release: bool,
 }

@@ -50,7 +50,7 @@
 
 use crate::{
     module::general::{Box2, Color, Vec2},
-    system::State,
+    script::State,
 };
 use std::sync::Arc;
 
@@ -98,6 +98,20 @@ impl Frame {
     const TEXTURE_COLOR: &str = "vs_texture_color";
     const TEXTURE_SAMPLE: &str = "texture_sample";
     const VIEW_PROJECTION: &str = "view_projection";
+
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::new)?;
+        module.function_meta(Self::draw)?;
+        module.function_meta(Self::draw_to)?;
+        module.function_meta(Self::draw_box)?;
+        module.function_meta(Self::draw_line)?;
+
+        Ok(())
+    }
+
+    //================================================================
 
     #[rune::function(path = Self::new)]
     #[rustfmt::skip]
@@ -281,7 +295,7 @@ impl Frame {
                 &data,
                 &Box2::rust_new(
                     &Vec2::rust_new(x as f32, y as f32),
-                    &Vec2::rust_new(thick as f32, thick as f32),
+                    &Vec2::rust_new(thick, thick),
                     0.0,
                 ),
                 &Box2::rust_new(&Vec2::rust_new(0.0, 0.0), &Vec2::rust_new(1.0, 1.0), 0.0),
@@ -491,6 +505,16 @@ struct Camera {
 }
 
 impl Camera {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::new)?;
+
+        Ok(())
+    }
+
+    //================================================================
+
     #[rune::function(path = Self::new)]
     fn new(state: &State, point: &Vec2, focus: &Vec2, angle: f32, zoom: f32) -> Self {
         let mut point = *point;
@@ -540,6 +564,21 @@ struct Render {
 }
 
 impl Render {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::new)?;
+        module.function_meta(Self::draw)?;
+        module.function_meta(Self::draw_box)?;
+        module.function_meta(Self::draw_box_color)?;
+        module.function_meta(Self::draw_box_color_clip)?;
+        module.function_meta(Self::scale)?;
+
+        Ok(())
+    }
+
+    //================================================================
+
     #[rune::function(path = Self::new)]
     fn new(state: &State, scale: Vec2) -> anyhow::Result<Self> {
         use three_d::*;
@@ -653,6 +692,21 @@ struct Image {
 }
 
 impl Image {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::new)?;
+        module.function_meta(Self::draw)?;
+        module.function_meta(Self::draw_box)?;
+        module.function_meta(Self::draw_box_color)?;
+        module.function_meta(Self::draw_box_color_clip)?;
+        module.function_meta(Self::scale)?;
+
+        Ok(())
+    }
+
+    //================================================================
+
     #[rune::function(path = Self::new)]
     fn new(state: &State, path: &str) -> anyhow::Result<Self> {
         use three_d::*;
@@ -813,6 +867,17 @@ struct Font {
 }
 
 impl Font {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::new)?;
+        module.function_meta(Self::draw)?;
+
+        Ok(())
+    }
+
+    //================================================================
+
     #[rune::function(path = Self::new)]
     fn new(state: &State, path: &str, scale: f32) -> anyhow::Result<Self> {
         let code: String = (32..127).map(|x| x as u8 as char).collect();
@@ -932,25 +997,108 @@ impl Font {
 
 #[derive(Any)]
 #[rune(item = ::video)]
-struct Canvas {}
+struct Window {}
 
-impl Canvas {
+impl Window {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::get_time_frame)?;
+        module.function_meta(Self::get_time_since)?;
+        //module.function_meta(Self::get_visible)?;
+        //module.function_meta(Self::get_minimize)?;
+        //module.function_meta(Self::get_maximize)?;
+        //module.function_meta(Self::get_focus)?;
+        //module.function_meta(Self::get_resize)?;
+        module.function_meta(Self::get_scale)?;
+        module.function_meta(Self::get_full)?;
+        module.function_meta(Self::set_minimize)?;
+        module.function_meta(Self::set_maximize)?;
+        module.function_meta(Self::set_focus)?;
+        module.function_meta(Self::set_name)?;
+        module.function_meta(Self::set_icon)?;
+        module.function_meta(Self::set_point)?;
+        module.function_meta(Self::set_scale_min)?;
+        module.function_meta(Self::set_scale_max)?;
+        module.function_meta(Self::set_scale)?;
+        module.function_meta(Self::set_full)?;
+
+        Ok(())
+    }
+
+    //================================================================
+
+    #[rune::function(path = Self::time_frame)]
+    fn get_time_frame(state: &State) -> f64 {
+        state.frame.elapsed_time
+    }
+
+    #[rune::function(path = Self::time_since)]
+    fn get_time_since(state: &State) -> f64 {
+        state.frame.accumulated_time
+    }
+
     #[rune::function(path = Self::scale)]
-    fn scale(state: &State) -> Vec2 {
+    fn get_scale(state: &State) -> Vec2 {
         Vec2::rust_new(
             state.frame.window_width as f32,
             state.frame.window_height as f32,
         )
     }
 
-    #[rune::function(path = Self::time_frame)]
-    fn time_frame(state: &State) -> f64 {
-        state.frame.elapsed_time
+    #[rune::function(path = Self::get_full)]
+    fn get_full(state: &State) -> bool {
+        state.input.window_get.full
     }
 
-    #[rune::function(path = Self::time_since)]
-    fn time_since(state: &State) -> f64 {
-        state.frame.accumulated_time
+    #[rune::function(path = Self::set_minimize)]
+    fn set_minimize(state: &mut State) {
+        state.input.window_set.minimize = Some(());
+    }
+
+    #[rune::function(path = Self::set_maximize)]
+    fn set_maximize(state: &mut State) {
+        state.input.window_set.maximize = Some(());
+    }
+
+    #[rune::function(path = Self::set_focus)]
+    fn set_focus(state: &mut State) {
+        state.input.window_set.focus = Some(());
+    }
+
+    #[rune::function(path = Self::set_point)]
+    fn set_point(state: &mut State, point: &Vec2) {
+        state.input.window_set.point = Some(*point);
+    }
+
+    #[rune::function(path = Self::set_name)]
+    fn set_name(state: &mut State, name: &str) {
+        state.input.window_set.name = Some(name.to_string());
+    }
+
+    #[rune::function(path = Self::set_icon)]
+    fn set_icon(state: &mut State, icon: &str) {
+        state.input.window_set.icon = Some(icon.to_string());
+    }
+
+    #[rune::function(path = Self::set_full)]
+    fn set_full(state: &mut State, window: bool) {
+        state.input.window_set.full = Some(window);
+    }
+
+    #[rune::function(path = Self::set_scale_min)]
+    fn set_scale_min(state: &mut State, scale_min: &Vec2) {
+        state.input.window_set.scale_min = Some(*scale_min);
+    }
+
+    #[rune::function(path = Self::set_scale_max)]
+    fn set_scale_max(state: &mut State, scale_max: &Vec2) {
+        state.input.window_set.scale_max = Some(*scale_max);
+    }
+
+    #[rune::function(path = Self::set_scale)]
+    fn set_scale(state: &mut State, scale: &Vec2) {
+        state.input.window_set.scale = Some(*scale);
     }
 }
 
@@ -960,40 +1108,12 @@ impl Canvas {
 pub fn module() -> anyhow::Result<Module> {
     let mut module = Module::from_meta(self::module_meta)?;
 
-    module.ty::<Frame>()?;
-    module.function_meta(Frame::new)?;
-    module.function_meta(Frame::draw)?;
-    module.function_meta(Frame::draw_to)?;
-    module.function_meta(Frame::draw_box)?;
-    module.function_meta(Frame::draw_line)?;
-
-    module.ty::<Camera>()?;
-    module.function_meta(Camera::new)?;
-
-    module.ty::<Render>()?;
-    module.function_meta(Render::new)?;
-    module.function_meta(Render::draw)?;
-    module.function_meta(Render::draw_box)?;
-    module.function_meta(Render::draw_box_color)?;
-    module.function_meta(Render::draw_box_color_clip)?;
-    module.function_meta(Render::scale)?;
-
-    module.ty::<Image>()?;
-    module.function_meta(Image::new)?;
-    module.function_meta(Image::draw)?;
-    module.function_meta(Image::draw_box)?;
-    module.function_meta(Image::draw_box_color)?;
-    module.function_meta(Image::draw_box_color_clip)?;
-    module.function_meta(Image::scale)?;
-
-    module.ty::<Font>()?;
-    module.function_meta(Font::new)?;
-    module.function_meta(Font::draw)?;
-
-    module.ty::<Canvas>()?;
-    module.function_meta(Canvas::scale)?;
-    module.function_meta(Canvas::time_frame)?;
-    module.function_meta(Canvas::time_since)?;
+    Frame::module(&mut module)?;
+    Camera::module(&mut module)?;
+    Render::module(&mut module)?;
+    Image::module(&mut module)?;
+    Font::module(&mut module)?;
+    Window::module(&mut module)?;
 
     Ok(module)
 }

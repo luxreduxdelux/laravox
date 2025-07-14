@@ -48,6 +48,8 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+use std::sync::{Arc, Mutex};
+
 use crate::module::{
     general::{Color, Vec2},
     video::Frame,
@@ -59,6 +61,77 @@ use rapier2d::{control::KinematicCharacterController, prelude::*};
 use rune::{Any, Module, Ref};
 
 //================================================================
+
+#[derive(Default)]
+struct CollisionHandler {
+    event_list: Arc<Mutex<Vec<Collision>>>,
+}
+
+#[derive(Any, Clone, Default)]
+#[rune(item = ::physical)]
+struct Collision {
+    #[rune(get, copy)]
+    handle_a: Collider,
+    #[rune(get, copy)]
+    handle_b: Collider,
+    #[rune(get)]
+    start: bool,
+    #[rune(get)]
+    sensor: bool,
+    #[rune(get)]
+    remove: bool,
+}
+
+impl Collision {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        Ok(())
+    }
+}
+
+impl EventHandler for CollisionHandler {
+    fn handle_collision_event(
+        &self,
+        _: &RigidBodySet,
+        _: &ColliderSet,
+        event: CollisionEvent,
+        _: Option<&ContactPair>,
+    ) {
+        let mut lock = self.event_list.lock().unwrap();
+        match event {
+            // TO-DO send event flag as well.
+            CollisionEvent::Started(collider_handle_a, collider_handle_b, collision_flag) => {
+                lock.push(Collision {
+                    handle_a: Collider::rust_new(collider_handle_a),
+                    handle_b: Collider::rust_new(collider_handle_b),
+                    start: true,
+                    sensor: collision_flag.contains(CollisionEventFlags::SENSOR),
+                    remove: collision_flag.contains(CollisionEventFlags::REMOVED),
+                });
+            }
+            CollisionEvent::Stopped(collider_handle_a, collider_handle_b, collision_flag) => {
+                lock.push(Collision {
+                    handle_a: Collider::rust_new(collider_handle_a),
+                    handle_b: Collider::rust_new(collider_handle_b),
+                    start: false,
+                    sensor: collision_flag.contains(CollisionEventFlags::SENSOR),
+                    remove: collision_flag.contains(CollisionEventFlags::REMOVED),
+                });
+            }
+        }
+    }
+
+    fn handle_contact_force_event(
+        &self,
+        _: f32,
+        _: &RigidBodySet,
+        _: &ColliderSet,
+        _: &ContactPair,
+        _: f32,
+    ) {
+    }
+}
 
 #[derive(Any)]
 #[rune(item = ::physical)]
@@ -75,9 +148,22 @@ struct Physical2D {
     rigid_body_set: RigidBodySet,
     collider_set: ColliderSet,
     debug_render: DebugRenderPipeline,
+    collision_handler: CollisionHandler,
 }
 
 impl Physical2D {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::new)?;
+        module.function_meta(Self::tick)?;
+        module.function_meta(Self::draw_debug)?;
+
+        Ok(())
+    }
+
+    //================================================================
+
     #[rune::function(path = Self::new)]
     fn new() -> Self {
         let integration_parameters = IntegrationParameters::default();
@@ -106,11 +192,17 @@ impl Physical2D {
             rigid_body_set,
             collider_set,
             debug_render,
+            collision_handler: CollisionHandler::default(),
         }
     }
 
     #[rune::function]
-    fn tick(&mut self, gravity: &Vec2) {
+    fn tick(&mut self, gravity: &Vec2) -> Vec<Collision> {
+        {
+            let mut list = self.collision_handler.event_list.lock().unwrap();
+            list.clear();
+        }
+
         self.physics_pipeline.step(
             &vector![gravity.x, gravity.y],
             &self.integration_parameters,
@@ -124,8 +216,12 @@ impl Physical2D {
             &mut self.ccd_solver,
             Some(&mut self.query_pipeline),
             &(),
-            &(),
+            &self.collision_handler,
         );
+
+        let list = self.collision_handler.event_list.lock().unwrap();
+
+        list.to_vec()
     }
 
     #[rune::function]
@@ -163,7 +259,7 @@ impl<'a> DebugRenderBackend for DebugRender<'a> {
 
 //================================================================
 
-#[derive(Any, Copy, Clone)]
+#[derive(Any, Copy, Clone, Default)]
 #[rune(item = ::physical)]
 struct Collider {
     #[allow(dead_code)]
@@ -171,9 +267,39 @@ struct Collider {
 }
 
 impl Collider {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::new_cuboid)?;
+        module.function_meta(Self::new_ball)?;
+        module.function_meta(Self::get_point)?;
+        module.function_meta(Self::set_point)?;
+        module.function_meta(Self::get_angle)?;
+        module.function_meta(Self::set_angle)?;
+        module.function_meta(Self::get_parent)?;
+        module.function_meta(Self::get_sensor)?;
+        module.function_meta(Self::set_sensor)?;
+        module.function_meta(Self::get_mass)?;
+        module.function_meta(Self::set_mass)?;
+        module.function_meta(Self::get_user_data)?;
+        module.function_meta(Self::set_user_data)?;
+        module.function_meta(Self::remove)?;
+
+        Ok(())
+    }
+
+    fn rust_new(inner: ColliderHandle) -> Self {
+        Self { inner }
+    }
+
+    //================================================================
+
     #[rune::function(path = Self::new_cuboid)]
     fn new_cuboid(physical: &mut Physical2D, half: &Vec2, parent: Option<Ref<Rigid>>) -> Self {
-        let inner = ColliderBuilder::cuboid(half.x, half.y).build();
+        let inner = ColliderBuilder::cuboid(half.x, half.y)
+            .active_events(ActiveEvents::COLLISION_EVENTS)
+            .active_collision_types(ActiveCollisionTypes::all())
+            .build();
 
         let inner = if let Some(parent) = parent {
             physical.collider_set.insert_with_parent(
@@ -188,6 +314,25 @@ impl Collider {
         Self { inner }
     }
 
+    #[rune::function(path = Self::new_ball)]
+    fn new_ball(physical: &mut Physical2D, scale: f32, parent: Option<Ref<Rigid>>) -> Self {
+        let inner = ColliderBuilder::ball(scale).build();
+
+        let inner = if let Some(parent) = parent {
+            physical.collider_set.insert_with_parent(
+                inner,
+                parent.inner,
+                &mut physical.rigid_body_set,
+            )
+        } else {
+            physical.collider_set.insert(inner)
+        };
+
+        Self { inner }
+    }
+
+    //================================================================
+
     #[rune::function]
     fn get_point(&self, physical: &Physical2D) -> Vec2 {
         let inner = physical.collider_set.get(self.inner).unwrap();
@@ -201,6 +346,76 @@ impl Collider {
         let inner = physical.collider_set.get_mut(self.inner).unwrap();
 
         inner.set_translation(vector![point.x, point.y]);
+    }
+
+    #[rune::function]
+    fn get_angle(&self, physical: &Physical2D) -> f32 {
+        let inner = physical.collider_set.get(self.inner).unwrap();
+        let value = inner.rotation();
+
+        value.re
+    }
+
+    #[rune::function]
+    fn set_angle(&self, physical: &mut Physical2D, angle: f32) {
+        let inner = physical.collider_set.get_mut(self.inner).unwrap();
+
+        inner.set_rotation(Rotation::new(angle));
+    }
+
+    #[rune::function]
+    fn get_parent(&self, physical: &Physical2D) -> Option<Rigid> {
+        if let Some(inner) = physical.collider_set.get(self.inner) {
+            if let Some(parent) = inner.parent() {
+                return Some(Rigid { inner: parent });
+            }
+        } else {
+            println!("Failed to get collider!");
+        }
+
+        None
+    }
+
+    #[rune::function]
+    fn get_sensor(&self, physical: &Physical2D) -> bool {
+        let inner = physical.collider_set.get(self.inner).unwrap();
+
+        inner.is_sensor()
+    }
+
+    #[rune::function]
+    fn set_sensor(&self, physical: &mut Physical2D, sensor: bool) {
+        let inner = physical.collider_set.get_mut(self.inner).unwrap();
+
+        inner.set_sensor(sensor);
+    }
+
+    #[rune::function]
+    fn get_mass(&self, physical: &Physical2D) -> f32 {
+        let inner = physical.collider_set.get(self.inner).unwrap();
+
+        inner.mass()
+    }
+
+    #[rune::function]
+    fn set_mass(&self, physical: &mut Physical2D, mass: f32) {
+        let inner = physical.collider_set.get_mut(self.inner).unwrap();
+
+        inner.set_mass(mass);
+    }
+
+    #[rune::function]
+    fn get_user_data(&self, physical: &Physical2D) -> u128 {
+        let inner = physical.collider_set.get(self.inner).unwrap();
+
+        inner.user_data
+    }
+
+    #[rune::function]
+    fn set_user_data(&self, physical: &mut Physical2D, user_data: u128) {
+        let inner = physical.collider_set.get_mut(self.inner).unwrap();
+
+        inner.user_data = user_data;
     }
 
     #[rune::function]
@@ -224,6 +439,25 @@ struct Rigid {
 }
 
 impl Rigid {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::new_dynamic)?;
+        module.function_meta(Self::new_static)?;
+        module.function_meta(Self::new_kinematic)?;
+        module.function_meta(Self::get_point)?;
+        module.function_meta(Self::set_point)?;
+        module.function_meta(Self::get_angle)?;
+        module.function_meta(Self::set_angle)?;
+        module.function_meta(Self::get_user_data)?;
+        module.function_meta(Self::set_user_data)?;
+        module.function_meta(Self::remove)?;
+
+        Ok(())
+    }
+
+    //================================================================
+
     #[rune::function(path = Self::new_dynamic)]
     fn new_dynamic(physical: &mut Physical2D) -> Self {
         let inner = RigidBodyBuilder::dynamic().build();
@@ -240,12 +474,36 @@ impl Rigid {
         Self { inner }
     }
 
+    #[rune::function(path = Self::new_kinematic)]
+    fn new_kinematic(physical: &mut Physical2D, position_kinematic: bool) -> Self {
+        let inner = {
+            if position_kinematic {
+                RigidBodyBuilder::kinematic_position_based().build()
+            } else {
+                RigidBodyBuilder::kinematic_velocity_based().build()
+            }
+        };
+
+        let inner = physical.rigid_body_set.insert(inner);
+
+        Self { inner }
+    }
+
+    //================================================================
+
     #[rune::function]
     fn get_point(&self, physical: &Physical2D) -> Vec2 {
         let inner = physical.rigid_body_set.get(self.inner).unwrap();
         let value = inner.translation();
 
         Vec2::rust_new(value.x, value.y)
+    }
+
+    #[rune::function]
+    fn set_point(&self, physical: &mut Physical2D, point: &Vec2, wake: bool) {
+        let inner = physical.rigid_body_set.get_mut(self.inner).unwrap();
+
+        inner.set_translation(vector![point.x, point.y], wake);
     }
 
     #[rune::function]
@@ -257,17 +515,24 @@ impl Rigid {
     }
 
     #[rune::function]
-    fn set_point(&self, physical: &mut Physical2D, point: &Vec2, wake: bool) {
-        let inner = physical.rigid_body_set.get_mut(self.inner).unwrap();
-
-        inner.set_translation(vector![point.x, point.y], wake);
-    }
-
-    #[rune::function]
     fn set_angle(&self, physical: &mut Physical2D, angle: f32, wake: bool) {
         let inner = physical.rigid_body_set.get_mut(self.inner).unwrap();
 
         inner.set_rotation(Rotation::new(angle), wake);
+    }
+
+    #[rune::function]
+    fn get_user_data(&self, physical: &Physical2D) -> u128 {
+        let inner = physical.rigid_body_set.get(self.inner).unwrap();
+
+        inner.user_data
+    }
+
+    #[rune::function]
+    fn set_user_data(&self, physical: &mut Physical2D, user_data: u128) {
+        let inner = physical.rigid_body_set.get_mut(self.inner).unwrap();
+
+        inner.user_data = user_data;
     }
 
     #[rune::function]
@@ -293,6 +558,18 @@ struct Controller {
 }
 
 impl Controller {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::new)?;
+        module.function_meta(Self::set_up)?;
+        module.function_meta(Self::movement)?;
+
+        Ok(())
+    }
+
+    //================================================================
+
     #[rune::function(path = Self::new)]
     fn new() -> Self {
         Self {
@@ -308,26 +585,46 @@ impl Controller {
     #[rune::function]
     fn movement(
         &self,
-        physical: &Physical2D,
+        physical: &mut Physical2D,
         point: &Vec2,
         collider: &Collider,
         rigid: &Rigid,
         // TO-DO formalize this as a structure
-    ) -> (bool, bool, Vec2) {
+    ) -> (bool, bool, Vec2, Vec<Collider>) {
+        let mut collision_list_rune = Vec::new();
+        let mut collision_list_rust = Vec::new();
+
         let collider = physical.collider_set.get(collider.inner).unwrap();
 
         let corrected_movement = self.inner.move_shape(
-            60.0,                     // The timestep length (can be set to SimulationSettings::dt).
-            &physical.rigid_body_set, // The RigidBodySet.
-            &physical.collider_set,   // The ColliderSet.
-            &physical.query_pipeline, // The QueryPipeline.
-            collider.shape(),         // The character’s shape.
-            collider.position(),      // The character’s initial position.
+            // TO-DO pass time-step as parameter.
+            60.0,
+            &physical.rigid_body_set,
+            &physical.collider_set,
+            &physical.query_pipeline,
+            collider.shape(),
+            collider.position(),
             vector![point.x, point.y],
+            // TO-DO allow not passing the rigid body.
             QueryFilter::default()
-                // Make sure the character we are trying to move isn’t considered an obstacle.
-                .exclude_rigid_body(rigid.inner),
-            |_| {}, // We don’t care about events in this example.
+                .exclude_rigid_body(rigid.inner)
+                .exclude_sensors(),
+            |collision| {
+                // TO-DO more information should be sent to Rune about a character collision.
+                collision_list_rune.push(Collider::rust_new(collision.handle));
+                collision_list_rust.push(collision);
+            },
+        );
+
+        self.inner.solve_character_collision_impulses(
+            60.0,
+            &mut physical.rigid_body_set,
+            &physical.collider_set,
+            &physical.query_pipeline,
+            collider.shape(),
+            collider.mass(),
+            &collision_list_rust,
+            QueryFilter::default(),
         );
 
         (
@@ -337,6 +634,7 @@ impl Controller {
                 corrected_movement.translation.x,
                 corrected_movement.translation.y,
             ),
+            collision_list_rune,
         )
     }
 }
@@ -347,30 +645,11 @@ impl Controller {
 pub fn module() -> anyhow::Result<Module> {
     let mut module = Module::from_meta(self::module_meta)?;
 
-    module.ty::<Physical2D>()?;
-    module.function_meta(Physical2D::new)?;
-    module.function_meta(Physical2D::tick)?;
-    module.function_meta(Physical2D::draw_debug)?;
-
-    module.ty::<Collider>()?;
-    module.function_meta(Collider::new_cuboid)?;
-    module.function_meta(Collider::get_point)?;
-    module.function_meta(Collider::set_point)?;
-    module.function_meta(Collider::remove)?;
-
-    module.ty::<Rigid>()?;
-    module.function_meta(Rigid::new_dynamic)?;
-    module.function_meta(Rigid::new_static)?;
-    module.function_meta(Rigid::get_point)?;
-    module.function_meta(Rigid::get_angle)?;
-    module.function_meta(Rigid::set_point)?;
-    module.function_meta(Rigid::set_angle)?;
-    module.function_meta(Rigid::remove)?;
-
-    module.ty::<Controller>()?;
-    module.function_meta(Controller::new)?;
-    module.function_meta(Controller::set_up)?;
-    module.function_meta(Controller::movement)?;
+    Physical2D::module(&mut module)?;
+    Collision::module(&mut module)?;
+    Collider::module(&mut module)?;
+    Rigid::module(&mut module)?;
+    Controller::module(&mut module)?;
 
     Ok(module)
 }
