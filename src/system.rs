@@ -142,7 +142,7 @@ impl System {
             }
 
             if let winit::event::Event::WindowEvent { ref event, .. } = event {
-                self.frame.handle_winit_window_event(&event);
+                self.frame.handle_winit_window_event(event);
 
                 match event {
                     winit::event::WindowEvent::Resized(physical_size) => {
@@ -159,9 +159,7 @@ impl System {
             }
 
             if let Some(state) = &mut script.state {
-                state
-                    .input
-                    .process(&event, &mut self.window, &mut self.frame);
+                state.input.process(&event, &mut self.window);
             }
         });
     }

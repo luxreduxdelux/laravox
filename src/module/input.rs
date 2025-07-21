@@ -64,16 +64,16 @@ struct Board {}
 
 impl Board {
     const KEY_LIST: [&str; 163] = [
-        "BOARD_KEY1",
-        "BOARD_KEY2",
-        "BOARD_KEY3",
-        "BOARD_KEY4",
-        "BOARD_KEY5",
-        "BOARD_KEY6",
-        "BOARD_KEY7",
-        "BOARD_KEY8",
-        "BOARD_KEY9",
-        "BOARD_KEY0",
+        "BOARD_1",
+        "BOARD_2",
+        "BOARD_3",
+        "BOARD_4",
+        "BOARD_5",
+        "BOARD_6",
+        "BOARD_7",
+        "BOARD_8",
+        "BOARD_9",
+        "BOARD_0",
         "BOARD_A",
         "BOARD_B",
         "BOARD_C",
@@ -132,8 +132,8 @@ impl Board {
         "BOARD_HOME",
         "BOARD_DELETE",
         "BOARD_END",
-        "BOARD_PAGEDOWN",
-        "BOARD_PAGEUP",
+        "BOARD_PAGE_DOWN",
+        "BOARD_PAGE_UP",
         "BOARD_LEFT",
         "BOARD_UP",
         "BOARD_RIGHT",
@@ -143,25 +143,25 @@ impl Board {
         "BOARD_SPACE",
         "BOARD_COMPOSE",
         "BOARD_CARET",
-        "BOARD_NUMLOCK",
-        "BOARD_NUMPAD0",
-        "BOARD_NUMPAD1",
-        "BOARD_NUMPAD2",
-        "BOARD_NUMPAD3",
-        "BOARD_NUMPAD4",
-        "BOARD_NUMPAD5",
-        "BOARD_NUMPAD6",
-        "BOARD_NUMPAD7",
-        "BOARD_NUMPAD8",
-        "BOARD_NUMPAD9",
-        "BOARD_NUMPADADD",
-        "BOARD_NUMPADDIVIDE",
-        "BOARD_NUMPADDECIMAL",
-        "BOARD_NUMPADCOMMA",
-        "BOARD_NUMPADENTER",
-        "BOARD_NUMPADEQUALS",
-        "BOARD_NUMPADMULTIPLY",
-        "BOARD_NUMPADSUBTRACT",
+        "BOARD_NUMBER_LOCK",
+        "BOARD_NUMBER_PAD_0",
+        "BOARD_NUMBER_PAD_1",
+        "BOARD_NUMBER_PAD_2",
+        "BOARD_NUMBER_PAD_3",
+        "BOARD_NUMBER_PAD_4",
+        "BOARD_NUMBER_PAD_5",
+        "BOARD_NUMBER_PAD_6",
+        "BOARD_NUMBER_PAD_7",
+        "BOARD_NUMBER_PAD_8",
+        "BOARD_NUMBER_PAD_9",
+        "BOARD_NUMBER_PAD_ADD",
+        "BOARD_NUMBER_PAD_DIVIDE",
+        "BOARD_NUMBER_PAD_DECIMAL",
+        "BOARD_NUMBER_PAD_COMMA",
+        "BOARD_NUMBER_PAD_ENTER",
+        "BOARD_NUMBER_PAD_EQUAL",
+        "BOARD_NUMBER_PAD_MULTIPLY",
+        "BOARD_NUMBER_PAD_SUBTRACT",
         "BOARD_ABNTC1",
         "BOARD_ABNTC2",
         "BOARD_APOSTROPHE",
@@ -179,32 +179,32 @@ impl Board {
         "BOARD_GRAVE",
         "BOARD_KANA",
         "BOARD_KANJI",
-        "BOARD_LALT",
-        "BOARD_LBRACKET",
-        "BOARD_LCONTROL",
-        "BOARD_LSHIFT",
-        "BOARD_LWIN",
+        "BOARD_LEFT_ALTERNATE",
+        "BOARD_LEFT_BRACKET",
+        "BOARD_LEFT_CONTROL",
+        "BOARD_LEFT_SHIFT",
+        "BOARD_LEFT_SUPER",
         "BOARD_MAIL",
-        "BOARD_MEDIASELECT",
-        "BOARD_MEDIASTOP",
+        "BOARD_MEDIA_SELECT",
+        "BOARD_MEDIA_STOP",
         "BOARD_MINUS",
         "BOARD_MUTE",
-        "BOARD_MYCOMPUTER",
-        "BOARD_NAVIGATEFORWARD",
-        "BOARD_NAVIGATEBACKWARD",
-        "BOARD_NEXTTRACK",
-        "BOARD_NOCONVERT",
+        "BOARD_MY_COMPUTER",
+        "BOARD_NAVIGATE_FORWARD",
+        "BOARD_NAVIGATE_BACKWARD",
+        "BOARD_NEXT_TRACK",
+        "BOARD_NO_CONVERT",
         "BOARD_OEM102",
         "BOARD_PERIOD",
-        "BOARD_PLAYPAUSE",
+        "BOARD_PLAY_PAUSE",
         "BOARD_PLUS",
         "BOARD_POWER",
-        "BOARD_PREVTRACK",
-        "BOARD_RALT",
-        "BOARD_RBRACKET",
-        "BOARD_RCONTROL",
-        "BOARD_RSHIFT",
-        "BOARD_RWIN",
+        "BOARD_PREVIOUS_TRACK",
+        "BOARD_RIGHT_ALTERNATE",
+        "BOARD_RIGHT_BRACKET",
+        "BOARD_RIGHT_CONTROL",
+        "BOARD_RIGHT_SHIFT",
+        "BOARD_RIGHT_SUPER",
         "BOARD_SEMICOLON",
         "BOARD_SLASH",
         "BOARD_SLEEP",
@@ -212,17 +212,17 @@ impl Board {
         "BOARD_SYSRQ",
         "BOARD_TAB",
         "BOARD_UNDERLINE",
-        "BOARD_UNLABELED",
-        "BOARD_VOLUMEDOWN",
-        "BOARD_VOLUMEUP",
+        "BOARD_NO_LABEL",
+        "BOARD_VOLUME_DOWN",
+        "BOARD_VOLUME_UP",
         "BOARD_WAKE",
-        "BOARD_WEBBACK",
-        "BOARD_WEBFAVORITES",
-        "BOARD_WEBFORWARD",
-        "BOARD_WEBHOME",
-        "BOARD_WEBREFRESH",
-        "BOARD_WEBSEARCH",
-        "BOARD_WEBSTOP",
+        "BOARD_WEB_BACK",
+        "BOARD_WEB_FAVORITES",
+        "BOARD_WEB_FORWARD",
+        "BOARD_WEB_HOME",
+        "BOARD_WEB_REFRESH",
+        "BOARD_WEB_SEARCH",
+        "BOARD_WEB_STOP",
         "BOARD_YEN",
         "BOARD_COPY",
         "BOARD_PASTE",
@@ -296,7 +296,10 @@ impl Mouse {
         module.function_meta(Self::press)?;
         module.function_meta(Self::release)?;
         module.function_meta(Self::point)?;
+        module.function_meta(Self::delta)?;
         module.function_meta(Self::wheel)?;
+        module.function_meta(Self::show)?;
+        module.function_meta(Self::lock)?;
 
         Ok(())
     }
@@ -342,9 +345,79 @@ impl Mouse {
         state.input.mouse.point
     }
 
+    #[rune::function(path = Self::delta)]
+    fn delta(state: &State) -> Vec2 {
+        state.input.mouse.delta
+    }
+
     #[rune::function(path = Self::wheel)]
     fn wheel(state: &State) -> Vec2 {
         state.input.mouse.wheel
+    }
+
+    #[rune::function(path = Self::show)]
+    fn show(state: &mut State, value: bool) {
+        state.input.window_set.cursor_show = Some(value);
+    }
+
+    #[rune::function(path = Self::lock)]
+    fn lock(state: &mut State, value: bool) {
+        state.input.window_set.cursor_lock = Some(value);
+    }
+}
+
+//================================================================
+
+#[derive(Any)]
+#[rune(item = ::input)]
+struct Pad {}
+
+impl Pad {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::up)?;
+        module.function_meta(Self::down)?;
+        module.function_meta(Self::press)?;
+        module.function_meta(Self::release)?;
+
+        Ok(())
+    }
+
+    //================================================================
+
+    fn get_index(state: &State, index: usize) -> anyhow::Result<&Button> {
+        if let Some(button) = state.input.pad.data.get(index) {
+            Ok(button)
+        } else {
+            Err(anyhow::Error::msg(format!(
+                "Pad(): Invalid index for pad button: {index}"
+            )))
+        }
+    }
+
+    #[rune::function(path = Self::up)]
+    /// Get the state of a pad input (up).
+    fn up(state: &State, index: usize) -> anyhow::Result<bool> {
+        Ok(!Self::get_index(state, index)?.down)
+    }
+
+    #[rune::function(path = Self::down)]
+    /// Get the state of a pad input (down).
+    fn down(state: &State, index: usize) -> anyhow::Result<bool> {
+        Ok(Self::get_index(state, index)?.down)
+    }
+
+    #[rune::function(path = Self::press)]
+    /// Get the state of a pad input (press).
+    fn press(state: &State, index: usize) -> anyhow::Result<bool> {
+        Ok(Self::get_index(state, index)?.press)
+    }
+
+    #[rune::function(path = Self::release)]
+    /// Get the state of a pad input (release).
+    fn release(state: &State, index: usize) -> anyhow::Result<bool> {
+        Ok(Self::get_index(state, index)?.release)
     }
 }
 
@@ -356,6 +429,7 @@ pub fn module() -> anyhow::Result<Module> {
 
     Board::module(&mut module)?;
     Mouse::module(&mut module)?;
+    Pad::module(&mut module)?;
 
     Ok(module)
 }

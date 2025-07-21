@@ -49,6 +49,7 @@
 */
 
 use crate::module::general::Vec2;
+use gilrs::{Event, Gilrs};
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher, event};
 use rodio::{OutputStream, OutputStreamHandle};
 use rune::{
@@ -67,7 +68,7 @@ use rune::{
 };
 use std::sync::{Arc, mpsc::Receiver};
 use three_d::{FrameInput, FrameInputGenerator};
-use winit::event_loop::ControlFlow;
+use winit::{event_loop::ControlFlow, window::CursorGrabMode};
 
 //================================================================
 
@@ -427,6 +428,7 @@ impl State {
 pub struct Input {
     pub board: Board,
     pub mouse: Mouse,
+    pub pad: Pad,
     pub window_get: WindowGet,
     pub window_set: WindowSet,
 }
@@ -436,19 +438,14 @@ impl Input {
     const BUTTON_COUNT_BOARD: usize = 163;
     // don't actually know what the total mouse button count is.
     const BUTTON_COUNT_MOUSE: usize = 16;
+    const BUTTON_COUNT_PAD: usize = 20;
 
-    pub fn process(
-        &mut self,
-        event: &winit::event::Event<()>,
-        window: &mut winit::window::Window,
-        generator: &mut FrameInputGenerator,
-    ) {
-        self.handle_state(window);
-
-        if let winit::event::Event::WindowEvent { event, .. } = event {
-            generator.handle_winit_window_event(event);
-
-            match event {
+    pub fn process(&mut self, event: &winit::event::Event<()>, window: &mut winit::window::Window) {
+        match event {
+            winit::event::Event::MainEventsCleared => {
+                self.handle_state(window);
+            }
+            winit::event::Event::WindowEvent { event, .. } => match event {
                 winit::event::WindowEvent::Resized(physical_size) => {
                     self.window_get.maximize = window.is_maximized();
                     self.window_get.full = window.fullscreen().is_some();
@@ -528,7 +525,15 @@ impl Input {
                     }
                 }
                 _ => {}
-            }
+            },
+            winit::event::Event::DeviceEvent { event, .. } => match event {
+                winit::event::DeviceEvent::MouseMotion { delta } => {
+                    self.mouse.delta.x = delta.0 as f32;
+                    self.mouse.delta.y = delta.1 as f32;
+                }
+                _ => {}
+            },
+            _ => {}
         }
     }
 
@@ -568,6 +573,22 @@ impl Input {
             self.window_set.full = None;
         }
 
+        if let Some(show) = self.window_set.cursor_show {
+            window.set_cursor_visible(show);
+
+            self.window_set.cursor_show = None;
+        }
+
+        if let Some(lock) = self.window_set.cursor_lock {
+            let _ = window.set_cursor_grab(if lock {
+                CursorGrabMode::Confined
+            } else {
+                CursorGrabMode::None
+            });
+
+            self.window_set.cursor_lock = None;
+        }
+
         // reset all previous board state.
         for button in &mut self.board.data {
             button.press = false;
@@ -582,11 +603,16 @@ impl Input {
 
         self.mouse.wheel.x = 0.0;
         self.mouse.wheel.y = 0.0;
+        self.mouse.delta.x = 0.0;
+        self.mouse.delta.y = 0.0;
         self.mouse.state = None;
 
         // reset all previous window state.
         self.window_get.point = None;
         self.window_get.scale = None;
+
+        // process pad data.
+        self.pad.process();
     }
 }
 
@@ -612,6 +638,8 @@ pub struct Mouse {
     pub state: Option<bool>,
     /// mouse cursor point.
     pub point: Vec2,
+    /// mouse cursor delta.
+    pub delta: Vec2,
 }
 
 impl Default for Mouse {
@@ -621,6 +649,47 @@ impl Default for Mouse {
             wheel: Vec2::rust_new(0.0, 0.0),
             state: None,
             point: Vec2::rust_new(0.0, 0.0),
+            delta: Vec2::rust_new(0.0, 0.0),
+        }
+    }
+}
+
+pub struct Pad {
+    /// pad button data.
+    pub data: [Button; Input::BUTTON_COUNT_PAD],
+    /// GILRS handle.
+    handle: Gilrs,
+}
+
+impl Pad {
+    fn process(&mut self) {
+        // reset all previous pad state.
+        for button in &mut self.data {
+            button.press = false;
+            button.release = false;
+        }
+
+        while let Some(Event { event, .. }) = self.handle.next_event() {
+            match event {
+                gilrs::EventType::ButtonPressed(button, _) => {
+                    self.data[button as usize].down = true;
+                    self.data[button as usize].press = true;
+                }
+                gilrs::EventType::ButtonReleased(button, _) => {
+                    self.data[button as usize].down = false;
+                    self.data[button as usize].release = true;
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+impl Default for Pad {
+    fn default() -> Self {
+        Self {
+            data: [Button::default(); Input::BUTTON_COUNT_PAD],
+            handle: Gilrs::new().expect("Pad::default(): Couldn't get GILRS handle."),
         }
     }
 }
@@ -663,6 +732,10 @@ pub struct WindowSet {
     pub scale: Option<Vec2>,
     /// go full-screen, or window mode.
     pub full: Option<bool>,
+    /// show, or hide the cursor.
+    pub cursor_show: Option<bool>,
+    /// lock, or free the cursor.
+    pub cursor_lock: Option<bool>,
 }
 
 #[derive(Copy, Clone, Default)]

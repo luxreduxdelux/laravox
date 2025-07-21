@@ -48,13 +48,13 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-use crate::script::State;
+use crate::{module::general::Vec2, script::State};
 
 //================================================================
 
-use rodio::Sink;
+use rodio::SpatialSink;
 use rune::{Any, Module};
-use std::sync::Arc;
+use std::{fs::File, sync::Arc};
 
 //================================================================
 
@@ -62,7 +62,7 @@ use std::sync::Arc;
 #[rune(item = ::audio)]
 struct Sound {
     data: SoundData,
-    sink: Sink,
+    sink: SpatialSink,
 }
 
 impl Sound {
@@ -71,6 +71,13 @@ impl Sound {
 
         module.function_meta(Self::new)?;
         module.function_meta(Self::play)?;
+        module.function_meta(Self::stop)?;
+        module.function_meta(Self::pause)?;
+        module.function_meta(Self::resume)?;
+        module.function_meta(Self::get_state)?;
+        module.function_meta(Self::set_volume)?;
+        module.function_meta(Self::set_speed)?;
+        module.function_meta(Self::set_point)?;
 
         Ok(())
     }
@@ -80,7 +87,12 @@ impl Sound {
     #[rune::function(path = Self::new)]
     fn new(state: &State, path: &str) -> anyhow::Result<Self> {
         let data = std::fs::read(path)?;
-        let sink = rodio::Sink::try_new(&state.audio.1)?;
+        let sink = SpatialSink::try_new(
+            &state.audio.1,
+            [0.0, 0.0, 0.0],
+            [-1.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+        )?;
 
         Ok(Self {
             data: SoundData(Arc::new(data)),
@@ -98,6 +110,46 @@ impl Sound {
 
         Ok(())
     }
+
+    #[rune::function]
+    fn stop(&mut self) {
+        self.sink.stop();
+    }
+
+    #[rune::function]
+    fn pause(&mut self) {
+        self.sink.pause();
+    }
+
+    #[rune::function]
+    fn resume(&mut self) {
+        self.sink.play();
+    }
+
+    #[rune::function]
+    fn get_state(&mut self) {
+        self.sink.is_paused();
+    }
+
+    #[rune::function]
+    fn set_volume(&mut self, volume: f32) {
+        self.sink.set_volume(volume);
+    }
+
+    #[rune::function]
+    fn set_speed(&mut self, speed: f32) {
+        self.sink.set_speed(speed);
+    }
+
+    #[rune::function]
+    fn set_point(&mut self, point_source: &Vec2, point_target: &Vec2) {
+        self.sink
+            .set_emitter_position([point_source.x, point_source.y, 0.0]);
+        self.sink
+            .set_left_ear_position([point_target.x - 1.0, point_target.y, 0.0]);
+        self.sink
+            .set_right_ear_position([point_target.x + 1.0, point_target.y, 0.0]);
+    }
 }
 
 struct SoundData(Arc<Vec<u8>>);
@@ -110,11 +162,104 @@ impl AsRef<[u8]> for SoundData {
 
 //================================================================
 
+#[derive(Any)]
+#[rune(item = ::audio)]
+struct Music {
+    data: File,
+    sink: SpatialSink,
+}
+
+impl Music {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::new)?;
+        module.function_meta(Self::play)?;
+        module.function_meta(Self::stop)?;
+        module.function_meta(Self::pause)?;
+        module.function_meta(Self::resume)?;
+        module.function_meta(Self::get_state)?;
+        module.function_meta(Self::set_volume)?;
+        module.function_meta(Self::set_speed)?;
+        module.function_meta(Self::set_point)?;
+
+        Ok(())
+    }
+
+    //================================================================
+
+    #[rune::function(path = Self::new)]
+    fn new(state: &State, path: &str) -> anyhow::Result<Self> {
+        let data = File::open(path)?;
+        let sink = SpatialSink::try_new(
+            &state.audio.1,
+            [0.0, 0.0, 0.0],
+            [-1.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+        )?;
+
+        Ok(Self { data, sink })
+    }
+
+    #[rune::function]
+    fn play(&mut self) -> anyhow::Result<()> {
+        self.sink.stop();
+        self.sink
+            .append(rodio::Decoder::new(self.data.try_clone()?)?);
+        self.sink.play();
+
+        Ok(())
+    }
+
+    #[rune::function]
+    fn stop(&mut self) {
+        self.sink.stop();
+    }
+
+    #[rune::function]
+    fn pause(&mut self) {
+        self.sink.pause();
+    }
+
+    #[rune::function]
+    fn resume(&mut self) {
+        self.sink.play();
+    }
+
+    #[rune::function]
+    fn get_state(&mut self) {
+        self.sink.is_paused();
+    }
+
+    #[rune::function]
+    fn set_volume(&mut self, volume: f32) {
+        self.sink.set_volume(volume);
+    }
+
+    #[rune::function]
+    fn set_speed(&mut self, speed: f32) {
+        self.sink.set_speed(speed);
+    }
+
+    #[rune::function]
+    fn set_point(&mut self, point_source: &Vec2, point_target: &Vec2) {
+        self.sink
+            .set_emitter_position([point_source.x, point_source.y, 0.0]);
+        self.sink
+            .set_left_ear_position([point_target.x - 1.0, point_target.y, 0.0]);
+        self.sink
+            .set_right_ear_position([point_target.x + 1.0, point_target.y, 0.0]);
+    }
+}
+
+//================================================================
+
 #[rune::module(::audio)]
 pub fn module() -> anyhow::Result<Module> {
     let mut module = Module::from_meta(self::module_meta)?;
 
     Sound::module(&mut module)?;
+    Music::module(&mut module)?;
 
     Ok(module)
 }

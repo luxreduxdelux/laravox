@@ -126,8 +126,8 @@ impl Vec2 {
         Self { x: 1.0, y: 1.0 }
     }
 
-    #[rune::function(path = Self::dot)]
-    fn dot(&mut self, other: Self) -> f32 {
+    #[rune::function]
+    fn dot(&mut self, other: &Self) -> f32 {
         (self.x * other.x) + (self.y * other.y)
     }
 
@@ -142,7 +142,7 @@ impl Vec2 {
     }
 
     #[rune::function(protocol = ADD)]
-    fn add(&self, other: Self) -> Self {
+    fn add(&self, other: &Self) -> Self {
         Self {
             x: self.x + other.x,
             y: self.y + other.y,
@@ -150,13 +150,13 @@ impl Vec2 {
     }
 
     #[rune::function(protocol = ADD_ASSIGN)]
-    fn add_assign(&mut self, other: Self) {
+    fn add_assign(&mut self, other: &Self) {
         self.x += other.x;
         self.y += other.y;
     }
 
     #[rune::function(protocol = SUB)]
-    fn sub(&self, other: Self) -> Self {
+    fn sub(&self, other: &Self) -> Self {
         Self {
             x: self.x - other.x,
             y: self.y - other.y,
@@ -164,7 +164,7 @@ impl Vec2 {
     }
 
     #[rune::function(protocol = SUB_ASSIGN)]
-    fn sub_assign(&mut self, other: Self) {
+    fn sub_assign(&mut self, other: &Self) {
         self.x -= other.x;
         self.y -= other.y;
     }
@@ -328,6 +328,9 @@ pub fn module() -> anyhow::Result<Module> {
     Vec2::module(&mut module)?;
     Box2::module(&mut module)?;
     Color::module(&mut module)?;
+
+    module.function("sin", |number: f64| number.sin()).build()?;
+    module.function("cos", |number: f64| number.cos()).build()?;
 
     Ok(module)
 }

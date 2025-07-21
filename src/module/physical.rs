@@ -51,7 +51,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::module::{
-    general::{Color, Vec2},
+    general::{Box2, Color, Vec2},
     video::Frame,
 };
 
@@ -61,77 +61,6 @@ use rapier2d::{control::KinematicCharacterController, prelude::*};
 use rune::{Any, Module, Ref};
 
 //================================================================
-
-#[derive(Default)]
-struct CollisionHandler {
-    event_list: Arc<Mutex<Vec<Collision>>>,
-}
-
-#[derive(Any, Clone, Default)]
-#[rune(item = ::physical)]
-struct Collision {
-    #[rune(get, copy)]
-    handle_a: Collider,
-    #[rune(get, copy)]
-    handle_b: Collider,
-    #[rune(get)]
-    start: bool,
-    #[rune(get)]
-    sensor: bool,
-    #[rune(get)]
-    remove: bool,
-}
-
-impl Collision {
-    fn module(module: &mut Module) -> anyhow::Result<()> {
-        module.ty::<Self>()?;
-
-        Ok(())
-    }
-}
-
-impl EventHandler for CollisionHandler {
-    fn handle_collision_event(
-        &self,
-        _: &RigidBodySet,
-        _: &ColliderSet,
-        event: CollisionEvent,
-        _: Option<&ContactPair>,
-    ) {
-        let mut lock = self.event_list.lock().unwrap();
-        match event {
-            // TO-DO send event flag as well.
-            CollisionEvent::Started(collider_handle_a, collider_handle_b, collision_flag) => {
-                lock.push(Collision {
-                    handle_a: Collider::rust_new(collider_handle_a),
-                    handle_b: Collider::rust_new(collider_handle_b),
-                    start: true,
-                    sensor: collision_flag.contains(CollisionEventFlags::SENSOR),
-                    remove: collision_flag.contains(CollisionEventFlags::REMOVED),
-                });
-            }
-            CollisionEvent::Stopped(collider_handle_a, collider_handle_b, collision_flag) => {
-                lock.push(Collision {
-                    handle_a: Collider::rust_new(collider_handle_a),
-                    handle_b: Collider::rust_new(collider_handle_b),
-                    start: false,
-                    sensor: collision_flag.contains(CollisionEventFlags::SENSOR),
-                    remove: collision_flag.contains(CollisionEventFlags::REMOVED),
-                });
-            }
-        }
-    }
-
-    fn handle_contact_force_event(
-        &self,
-        _: f32,
-        _: &RigidBodySet,
-        _: &ColliderSet,
-        _: &ContactPair,
-        _: f32,
-    ) {
-    }
-}
 
 #[derive(Any)]
 #[rune(item = ::physical)]
@@ -257,16 +186,140 @@ impl<'a> DebugRenderBackend for DebugRender<'a> {
     }
 }
 
+#[derive(Default)]
+struct CollisionHandler {
+    event_list: Arc<Mutex<Vec<Collision>>>,
+}
+
+impl EventHandler for CollisionHandler {
+    fn handle_collision_event(
+        &self,
+        _: &RigidBodySet,
+        _: &ColliderSet,
+        event: CollisionEvent,
+        _: Option<&ContactPair>,
+    ) {
+        let mut lock = self.event_list.lock().unwrap();
+        match event {
+            // TO-DO send event flag as well.
+            CollisionEvent::Started(collider_handle_a, collider_handle_b, collision_flag) => {
+                lock.push(Collision {
+                    handle_a: Solid::rust_new(collider_handle_a),
+                    handle_b: Solid::rust_new(collider_handle_b),
+                    start: true,
+                    sensor: collision_flag.contains(CollisionEventFlags::SENSOR),
+                    remove: collision_flag.contains(CollisionEventFlags::REMOVED),
+                });
+            }
+            CollisionEvent::Stopped(collider_handle_a, collider_handle_b, collision_flag) => {
+                lock.push(Collision {
+                    handle_a: Solid::rust_new(collider_handle_a),
+                    handle_b: Solid::rust_new(collider_handle_b),
+                    start: false,
+                    sensor: collision_flag.contains(CollisionEventFlags::SENSOR),
+                    remove: collision_flag.contains(CollisionEventFlags::REMOVED),
+                });
+            }
+        }
+    }
+
+    fn handle_contact_force_event(
+        &self,
+        _: f32,
+        _: &RigidBodySet,
+        _: &ColliderSet,
+        _: &ContactPair,
+        _: f32,
+    ) {
+    }
+}
+
+//================================================================
+
+#[derive(Any, Clone, Default)]
+#[rune(item = ::physical)]
+struct Collision {
+    #[rune(get, copy)]
+    handle_a: Solid,
+    #[rune(get, copy)]
+    handle_b: Solid,
+    #[rune(get)]
+    start: bool,
+    #[rune(get)]
+    sensor: bool,
+    #[rune(get)]
+    remove: bool,
+}
+
+impl Collision {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        Ok(())
+    }
+}
+
+//================================================================
+
+#[derive(Any)]
+#[rune(item = ::physical)]
+struct Intersect {}
+
+impl Intersect {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::box_2_box_2)?;
+        module.function_meta(Self::box_2_circle)?;
+        module.function_meta(Self::circle_circle)?;
+        module.function_meta(Self::vec_2_box_2)?;
+        module.function_meta(Self::vec_2_circle)?;
+
+        Ok(())
+    }
+
+    #[rune::function(path = Self::box_2_box_2)]
+    fn box_2_box_2(a: &Box2, b: &Box2) -> bool {
+        a.point.x < b.scale.x
+            && a.scale.x > b.point.x
+            && a.point.y > b.scale.y
+            && a.scale.y < b.point.y
+    }
+
+    #[rune::function(path = Self::box_2_circle)]
+    fn box_2_circle(a: &Vec2, b: &Box2) -> bool {
+        todo!()
+    }
+
+    #[rune::function(path = Self::circle_circle)]
+    fn circle_circle(a_point: &Vec2, a_radius: f32, b_point: &Vec2, b_radius: f32) -> bool {
+        let distance = (a_point.x - b_point.x).powi(2) + (a_point.y - b_point.y).powi(2);
+
+        distance >= (a_radius - b_radius).powi(2) && distance <= (a_radius + b_radius).powi(2)
+    }
+
+    #[rune::function(path = Self::vec_2_box_2)]
+    fn vec_2_box_2(a: &Vec2, b: &Box2) -> bool {
+        (a.x >= b.point.x && a.x <= b.point.x + b.scale.x)
+            && (a.y >= b.point.y && a.y <= b.point.y + b.scale.y)
+    }
+
+    #[rune::function(path = Self::vec_2_circle)]
+    fn vec_2_circle(a: &Vec2, b_point: &Vec2, b_radius: f32) -> bool {
+        (a.x - b_point.x).powi(2) + (a.y - b_point.y).powi(2) < b_radius.powi(2)
+    }
+}
+
 //================================================================
 
 #[derive(Any, Copy, Clone, Default)]
 #[rune(item = ::physical)]
-struct Collider {
+struct Solid {
     #[allow(dead_code)]
     inner: ColliderHandle,
 }
 
-impl Collider {
+impl Solid {
     fn module(module: &mut Module) -> anyhow::Result<()> {
         module.ty::<Self>()?;
 
@@ -370,7 +423,7 @@ impl Collider {
                 return Some(Rigid { inner: parent });
             }
         } else {
-            println!("Failed to get collider!");
+            println!("Failed to get solid!");
         }
 
         None
@@ -587,14 +640,14 @@ impl Controller {
         &self,
         physical: &mut Physical2D,
         point: &Vec2,
-        collider: &Collider,
+        solid: &Solid,
         rigid: &Rigid,
         // TO-DO formalize this as a structure
-    ) -> (bool, bool, Vec2, Vec<Collider>) {
+    ) -> (bool, bool, Vec2, Vec<Solid>) {
         let mut collision_list_rune = Vec::new();
         let mut collision_list_rust = Vec::new();
 
-        let collider = physical.collider_set.get(collider.inner).unwrap();
+        let solid = physical.collider_set.get(solid.inner).unwrap();
 
         let corrected_movement = self.inner.move_shape(
             // TO-DO pass time-step as parameter.
@@ -602,8 +655,8 @@ impl Controller {
             &physical.rigid_body_set,
             &physical.collider_set,
             &physical.query_pipeline,
-            collider.shape(),
-            collider.position(),
+            solid.shape(),
+            solid.position(),
             vector![point.x, point.y],
             // TO-DO allow not passing the rigid body.
             QueryFilter::default()
@@ -611,7 +664,7 @@ impl Controller {
                 .exclude_sensors(),
             |collision| {
                 // TO-DO more information should be sent to Rune about a character collision.
-                collision_list_rune.push(Collider::rust_new(collision.handle));
+                collision_list_rune.push(Solid::rust_new(collision.handle));
                 collision_list_rust.push(collision);
             },
         );
@@ -621,8 +674,8 @@ impl Controller {
             &mut physical.rigid_body_set,
             &physical.collider_set,
             &physical.query_pipeline,
-            collider.shape(),
-            collider.mass(),
+            solid.shape(),
+            solid.mass(),
             &collision_list_rust,
             QueryFilter::default(),
         );
@@ -647,7 +700,8 @@ pub fn module() -> anyhow::Result<Module> {
 
     Physical2D::module(&mut module)?;
     Collision::module(&mut module)?;
-    Collider::module(&mut module)?;
+    Intersect::module(&mut module)?;
+    Solid::module(&mut module)?;
     Rigid::module(&mut module)?;
     Controller::module(&mut module)?;
 

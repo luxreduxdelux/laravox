@@ -867,11 +867,14 @@ struct Font {
 }
 
 impl Font {
+    const DEFAULT_FONT: &[u8] = include_bytes!("../../data/font.ttf");
+
     fn module(module: &mut Module) -> anyhow::Result<()> {
         module.ty::<Self>()?;
 
         module.function_meta(Self::new)?;
         module.function_meta(Self::draw)?;
+        module.function_meta(Self::measure)?;
 
         Ok(())
     }
@@ -879,9 +882,17 @@ impl Font {
     //================================================================
 
     #[rune::function(path = Self::new)]
-    fn new(state: &State, path: &str, scale: f32) -> anyhow::Result<Self> {
+    fn new(state: &State, path: Option<String>, scale: f32, filter: bool) -> anyhow::Result<Self> {
         let code: String = (32..127).map(|x| x as u8 as char).collect();
-        let font = std::fs::read(path)?;
+
+        let font = {
+            if let Some(path) = &path {
+                &std::fs::read(path)?
+            } else {
+                Self::DEFAULT_FONT
+            }
+        };
+
         let font = fontdue::Font::from_bytes(font, fontdue::FontSettings::default()).unwrap();
         let mut layout =
             fontdue::layout::Layout::new(fontdue::layout::CoordinateSystem::PositiveYDown);
@@ -892,7 +903,6 @@ impl Font {
 
         let mut data = Vec::new();
         let mut size = (0, 0);
-
         let mut map = HashMap::new();
 
         for glyph in layout.glyphs() {
@@ -915,7 +925,8 @@ impl Font {
             )
             .unwrap();
 
-            size.0 += glyph.width;
+            // pad each letter by 4px.
+            size.0 += glyph.width + 4;
             size.1 = size.1.max(glyph.height);
 
             data.push((metric, buffer));
@@ -932,17 +943,25 @@ impl Font {
                 buffer[(push + p_x) + (size.0 * p_y)] = *pixel;
             }
 
-            push += metric.width;
+            push += metric.width + 4;
         }
 
         use three_d::*;
+
+        let filter = {
+            if filter {
+                Interpolation::Linear
+            } else {
+                Interpolation::Nearest
+            }
+        };
 
         let data = CpuTexture {
             data: TextureData::RgbaU8(buffer),
             width: size.0 as u32,
             height: size.1 as u32,
-            min_filter: Interpolation::Nearest,
-            mag_filter: Interpolation::Nearest,
+            min_filter: filter,
+            mag_filter: filter,
             ..Default::default()
         };
 
@@ -951,45 +970,87 @@ impl Font {
         Ok(Self {
             map,
             data,
-            hash: path.to_string(),
+            hash: path.unwrap_or("default_font".to_string()),
             scale,
         })
     }
 
     #[rune::function]
-    #[rustfmt::skip]
-    fn draw(&mut self, frame: &mut Frame, point: &Vec2, scale: f32, text: String) {
-        let mut push = 0.0;
-
-        let scale = scale / self.scale;
+    fn draw(&self, frame: &mut Frame, point: &Vec2, text: String, scale: f32) {
+        let mut push = Vec2::rust_new(0.0, 0.0);
+        let scale_normal = scale / self.scale;
 
         for character in text.chars() {
-            if let Some(glyph) = self.map.get(&character) {
-                frame.draw_image(&self.hash, &self.data, &Box2 {
-                    point: Vec2 {
-                        x: point.x + push,
-                        y: point.y + glyph.point.1 * scale
-                    },
-                    scale: Vec2 {
-                        x: glyph.scale.0 * scale,
-                        y: glyph.scale.1 * scale
-                    },
-                    angle: 0.0
-                }, &Box2 {
-                    point: Vec2 {
-                        x: glyph.shift,
-                        y: 0.0
-                    },
-                    scale: Vec2 {
-                        x: glyph.scale.0,
-                        y: glyph.scale.1
-                    },
-                    angle: 0.0
-                }, &Color { r: 255, g: 255, b: 255, a: 255 });
+            if character == '\n' {
+                push.x = 0.0;
+                push.y += scale;
+            } else {
+                if let Some(glyph) = self.map.get(&character) {
+                    frame.draw_image(
+                        &self.hash,
+                        &self.data,
+                        &Box2 {
+                            point: Vec2 {
+                                x: point.x + push.x,
+                                y: point.y + push.y + glyph.point.1 * scale_normal,
+                            },
+                            scale: Vec2 {
+                                x: glyph.scale.0 * scale_normal,
+                                y: glyph.scale.1 * scale_normal,
+                            },
+                            angle: 0.0,
+                        },
+                        &Box2 {
+                            point: Vec2 {
+                                x: glyph.shift,
+                                y: 0.0,
+                            },
+                            scale: Vec2 {
+                                x: glyph.scale.0,
+                                y: glyph.scale.1,
+                            },
+                            angle: 0.0,
+                        },
+                        &Color {
+                            r: 255,
+                            g: 255,
+                            b: 255,
+                            a: 255,
+                        },
+                    );
 
-                push += glyph.push.0 * scale;
+                    push.x += glyph.push.0 * scale_normal;
+                } else {
+                    push.x += scale;
+                }
             }
         }
+    }
+
+    #[rune::function]
+    fn measure(&self, text: String, scale: f32) -> Vec2 {
+        let mut size = Vec2::rust_new(0.0, scale);
+        let mut push = 0.0;
+        let scale_normal = scale / self.scale;
+
+        for character in text.chars() {
+            if character == '\n' {
+                push = 0.0;
+                size.y += scale;
+            } else {
+                if let Some(glyph) = self.map.get(&character) {
+                    push += glyph.push.0 * scale_normal;
+                } else {
+                    push += scale;
+                }
+            }
+
+            if size.x <= push {
+                size.x = push;
+            }
+        }
+
+        size
     }
 }
 
@@ -1028,17 +1089,17 @@ impl Window {
 
     //================================================================
 
-    #[rune::function(path = Self::time_frame)]
+    #[rune::function(path = Self::get_time_frame)]
     fn get_time_frame(state: &State) -> f64 {
         state.frame.elapsed_time
     }
 
-    #[rune::function(path = Self::time_since)]
+    #[rune::function(path = Self::get_time_since)]
     fn get_time_since(state: &State) -> f64 {
         state.frame.accumulated_time
     }
 
-    #[rune::function(path = Self::scale)]
+    #[rune::function(path = Self::get_scale)]
     fn get_scale(state: &State) -> Vec2 {
         Vec2::rust_new(
             state.frame.window_width as f32,
