@@ -49,7 +49,7 @@
 */
 
 use crate::module::general::Vec2;
-use gilrs::{Event, Gilrs};
+use gilrs::{Event, Gamepad, GamepadId, Gilrs};
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher, event};
 use rodio::{OutputStream, OutputStreamHandle};
 use rune::{
@@ -66,9 +66,15 @@ use rune::{
     runtime::{Function, GuardedArgs},
     termcolor::{Buffer, ColorChoice, StandardStream},
 };
-use std::sync::{Arc, mpsc::Receiver};
+use std::{
+    collections::HashMap,
+    sync::{Arc, mpsc::Receiver},
+};
 use three_d::{FrameInput, FrameInputGenerator};
-use winit::{event_loop::ControlFlow, window::CursorGrabMode};
+use winit::{
+    event_loop::ControlFlow,
+    window::{CursorGrabMode, CursorIcon},
+};
 
 //================================================================
 
@@ -573,6 +579,15 @@ impl Input {
             self.window_set.full = None;
         }
 
+        if let Some(icon) = self.window_set.cursor_icon {
+            // warning -- this is assuming that the input is safe, from input.rs!
+            let icon: CursorIcon = unsafe { std::mem::transmute(icon as i8) };
+
+            window.set_cursor_icon(icon);
+
+            self.window_set.cursor_icon = None;
+        }
+
         if let Some(show) = self.window_set.cursor_show {
             window.set_cursor_visible(show);
 
@@ -595,12 +610,17 @@ impl Input {
             button.release = false;
         }
 
+        self.board.last_press = None;
+        self.board.last_release = None;
+
         // reset all previous mouse state.
         for button in &mut self.mouse.data {
             button.press = false;
             button.release = false;
         }
 
+        self.mouse.last_press = None;
+        self.mouse.last_release = None;
         self.mouse.wheel.x = 0.0;
         self.mouse.wheel.y = 0.0;
         self.mouse.delta.x = 0.0;
@@ -619,12 +639,18 @@ impl Input {
 pub struct Board {
     // board button data.
     pub data: [Button; Input::BUTTON_COUNT_BOARD],
+    /// last board button press.
+    pub last_press: Option<usize>,
+    /// last board button release.
+    pub last_release: Option<usize>,
 }
 
 impl Default for Board {
     fn default() -> Self {
         Self {
             data: [Button::default(); Input::BUTTON_COUNT_BOARD],
+            last_press: None,
+            last_release: None,
         }
     }
 }
@@ -640,6 +666,10 @@ pub struct Mouse {
     pub point: Vec2,
     /// mouse cursor delta.
     pub delta: Vec2,
+    /// last mouse button press.
+    pub last_press: Option<usize>,
+    /// last mouse button release.
+    pub last_release: Option<usize>,
 }
 
 impl Default for Mouse {
@@ -650,35 +680,76 @@ impl Default for Mouse {
             state: None,
             point: Vec2::rust_new(0.0, 0.0),
             delta: Vec2::rust_new(0.0, 0.0),
+            last_press: None,
+            last_release: None,
         }
     }
 }
 
+#[derive(Default)]
+pub struct PadState {
+    pub button: [Button; Input::BUTTON_COUNT_PAD],
+    pub axis: [f32; 9],
+    /// last pad button press.
+    pub last_press: Option<usize>,
+    /// last pad button release.
+    pub last_release: Option<usize>,
+}
+
 pub struct Pad {
     /// pad button data.
-    pub data: [Button; Input::BUTTON_COUNT_PAD],
+    pub data: HashMap<GamepadId, PadState>,
     /// GILRS handle.
-    handle: Gilrs,
+    pub handle: Gilrs,
 }
 
 impl Pad {
-    fn process(&mut self) {
-        // reset all previous pad state.
-        for button in &mut self.data {
-            button.press = false;
-            button.release = false;
+    pub fn get_pad(&self, index: usize) -> Option<(&GamepadId, &PadState)> {
+        for (i, value) in self.data.iter().enumerate() {
+            if i == index {
+                return Some(value);
+            }
         }
 
-        while let Some(Event { event, .. }) = self.handle.next_event() {
+        None
+    }
+
+    fn process(&mut self) {
+        // reset all previous pad state.
+        for pad in self.data.values_mut() {
+            for button in &mut pad.button {
+                button.press = false;
+                button.release = false;
+            }
+
+            pad.last_press = None;
+            pad.last_release = None;
+        }
+
+        while let Some(Event { event, id, .. }) = self.handle.next_event() {
+            let entry = self.data.entry(id).or_default();
+
             match event {
                 gilrs::EventType::ButtonPressed(button, _) => {
-                    self.data[button as usize].down = true;
-                    self.data[button as usize].press = true;
+                    entry.button[button as usize].down = true;
+                    entry.button[button as usize].press = true;
                 }
                 gilrs::EventType::ButtonReleased(button, _) => {
-                    self.data[button as usize].down = false;
-                    self.data[button as usize].release = true;
+                    entry.button[button as usize].down = false;
+                    entry.button[button as usize].release = true;
                 }
+                gilrs::EventType::AxisChanged(axis, value, _) => {
+                    entry.axis[axis as usize] = value;
+                }
+                gilrs::EventType::Connected => {}
+                gilrs::EventType::Disconnected => {}
+                gilrs::EventType::ButtonChanged(button, value, _) => match button {
+                    // code.into_u32() doesn't seem to work properly, just map the button
+                    // to the corresponding axis entry manually for now.
+                    gilrs::Button::LeftTrigger2 => entry.axis[2] = value,
+                    gilrs::Button::RightTrigger2 => entry.axis[5] = value,
+                    _ => {}
+                },
                 _ => {}
             }
         }
@@ -688,7 +759,7 @@ impl Pad {
 impl Default for Pad {
     fn default() -> Self {
         Self {
-            data: [Button::default(); Input::BUTTON_COUNT_PAD],
+            data: HashMap::default(),
             handle: Gilrs::new().expect("Pad::default(): Couldn't get GILRS handle."),
         }
     }
@@ -732,6 +803,8 @@ pub struct WindowSet {
     pub scale: Option<Vec2>,
     /// go full-screen, or window mode.
     pub full: Option<bool>,
+    /// cursor icon.
+    pub cursor_icon: Option<usize>,
     /// show, or hide the cursor.
     pub cursor_show: Option<bool>,
     /// lock, or free the cursor.

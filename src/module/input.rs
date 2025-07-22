@@ -63,7 +63,7 @@ use super::general::Vec2;
 struct Board {}
 
 impl Board {
-    const KEY_LIST: [&str; 163] = [
+    const LIST_KEY: [&str; 163] = [
         "BOARD_1",
         "BOARD_2",
         "BOARD_3",
@@ -236,8 +236,11 @@ impl Board {
         module.function_meta(Self::down)?;
         module.function_meta(Self::press)?;
         module.function_meta(Self::release)?;
+        module.function_meta(Self::last_press)?;
+        module.function_meta(Self::last_release)?;
+        module.function_meta(Self::key_name)?;
 
-        for (i, key) in Self::KEY_LIST.iter().enumerate() {
+        for (i, key) in Self::LIST_KEY.iter().enumerate() {
             module.constant(key, i).build()?;
         }
 
@@ -279,6 +282,27 @@ impl Board {
     fn release(state: &State, index: usize) -> anyhow::Result<bool> {
         Ok(Self::get_index(state, index)?.release)
     }
+
+    #[rune::function(path = Self::last_press)]
+    fn last_press(state: &State) -> Option<usize> {
+        state.input.board.last_press
+    }
+
+    #[rune::function(path = Self::last_release)]
+    fn last_release(state: &State) -> Option<usize> {
+        state.input.board.last_release
+    }
+
+    #[rune::function(path = Self::key_name)]
+    fn key_name(key: usize) -> anyhow::Result<String> {
+        if let Some(name) = Self::LIST_KEY.get(key) {
+            Ok(name.to_string())
+        } else {
+            Err(anyhow::Error::msg(format!(
+                "Board::key_name(): Invalid index for board button: {key}"
+            )))
+        }
+    }
 }
 
 //================================================================
@@ -288,6 +312,51 @@ impl Board {
 struct Mouse {}
 
 impl Mouse {
+    const LIST_KEY: [&str; 5] = [
+        "MOUSE_LEFT",
+        "MOUSE_RIGHT",
+        "MOUSE_MIDDLE",
+        "MOUSE_BACK",
+        "MOUSE_FORWARD",
+    ];
+
+    const LIST_ICON: [&str; 34] = [
+        "MOUSE_ICON_DEFAULT",
+        "MOUSE_ICON_CONTEXT_MENU",
+        "MOUSE_ICON_HELP",
+        "MOUSE_ICON_POINTER",
+        "MOUSE_ICON_PROGRESS",
+        "MOUSE_ICON_WAIT",
+        "MOUSE_ICON_CELL",
+        "MOUSE_ICON_CROSSHAIR",
+        "MOUSE_ICON_TEXT",
+        "MOUSE_ICON_VERTICAL_TEXT",
+        "MOUSE_ICON_ALIAS",
+        "MOUSE_ICON_COPY",
+        "MOUSE_ICON_MOVE",
+        "MOUSE_ICON_NO_DROP",
+        "MOUSE_ICON_NOT_ALLOWED",
+        "MOUSE_ICON_GRAB",
+        "MOUSE_ICON_GRABBING",
+        "MOUSE_ICON_E_RESIZE",
+        "MOUSE_ICON_N_RESIZE",
+        "MOUSE_ICON_NE_RESIZE",
+        "MOUSE_ICON_NW_RESIZE",
+        "MOUSE_ICON_SR_ESIZE",
+        "MOUSE_ICON_SE_RESIZE",
+        "MOUSE_ICON_SW_RESIZE",
+        "MOUSE_ICON_W_RESIZE",
+        "MOUSE_ICON_EW_RESIZE",
+        "MOUSE_ICON_NS_RESIZE",
+        "MOUSE_ICON_NE_SW_RESIZE",
+        "MOUSE_ICON_NW_SERESIZE",
+        "MOUSE_ICON_COL_RESIZE",
+        "MOUSE_ICON_ROW_RESIZE",
+        "MOUSE_ICON_ALL_SCROLL",
+        "MOUSE_ICON_ZOOM_IN",
+        "MOUSE_ICON_ZOOM_OUT",
+    ];
+
     fn module(module: &mut Module) -> anyhow::Result<()> {
         module.ty::<Self>()?;
 
@@ -295,11 +364,22 @@ impl Mouse {
         module.function_meta(Self::down)?;
         module.function_meta(Self::press)?;
         module.function_meta(Self::release)?;
+        module.function_meta(Self::last_press)?;
+        module.function_meta(Self::last_release)?;
         module.function_meta(Self::point)?;
         module.function_meta(Self::delta)?;
         module.function_meta(Self::wheel)?;
+        module.function_meta(Self::icon)?;
         module.function_meta(Self::show)?;
         module.function_meta(Self::lock)?;
+
+        for (i, key) in Self::LIST_KEY.iter().enumerate() {
+            module.constant(key, i).build()?;
+        }
+
+        for (i, key) in Self::LIST_ICON.iter().enumerate() {
+            module.constant(key, i).build()?;
+        }
 
         Ok(())
     }
@@ -340,6 +420,16 @@ impl Mouse {
         Ok(Self::get_index(state, index)?.release)
     }
 
+    #[rune::function(path = Self::last_press)]
+    fn last_press(state: &State) -> Option<usize> {
+        state.input.mouse.last_press
+    }
+
+    #[rune::function(path = Self::last_release)]
+    fn last_release(state: &State) -> Option<usize> {
+        state.input.mouse.last_release
+    }
+
     #[rune::function(path = Self::point)]
     fn point(state: &State) -> Vec2 {
         state.input.mouse.point
@@ -353,6 +443,18 @@ impl Mouse {
     #[rune::function(path = Self::wheel)]
     fn wheel(state: &State) -> Vec2 {
         state.input.mouse.wheel
+    }
+
+    #[rune::function(path = Self::icon)]
+    fn icon(state: &mut State, index: usize) -> anyhow::Result<()> {
+        if index < Self::LIST_ICON.len() {
+            state.input.window_set.cursor_icon = Some(index);
+            return Ok(());
+        }
+
+        Err(anyhow::Error::msg(format!(
+            "Mouse::icon(): Invalid index for mouse cursor: {index}"
+        )))
     }
 
     #[rune::function(path = Self::show)]
@@ -373,6 +475,41 @@ impl Mouse {
 struct Pad {}
 
 impl Pad {
+    const LIST_KEY: [&str; 20] = [
+        "PAD_SOUTH",
+        "PAD_EAST",
+        "PAD_NORTH",
+        "PAD_WEST",
+        "PAD_C",
+        "PAD_Z",
+        "PAD_LEFT_BUMPER",
+        "PAD_LEFT_TRIGGER",
+        "PAD_RIGHT_BUMPER",
+        "PAD_RIGHT_TRIGGER",
+        "PAD_SELECT",
+        "PAD_START",
+        "PAD_MODE",
+        "PAD_LEFT_THUMB",
+        "PAD_RIGHT_THUMB",
+        "PAD_UP",
+        "PAD_DOWN",
+        "PAD_LEFT",
+        "PAD_RIGHT",
+        "PAD_UNKNOWN",
+    ];
+
+    const LIST_AXIS: [&str; 9] = [
+        "PAD_AXIS_LEFT_STICK_X",
+        "PAD_AXIS_LEFT_STICK_Y",
+        "PAD_AXIS_LEFT_TRIGGER",
+        "PAD_AXIS_RIGHT_STICK_X",
+        "PAD_AXIS_RIGHT_STICK_Y",
+        "PAD_AXIS_RIGHT_TRIGGER",
+        "PAD_AXIS_X",
+        "PAD_AXIS_Y",
+        "PAD_AXIS_UNKNOWN",
+    ];
+
     fn module(module: &mut Module) -> anyhow::Result<()> {
         module.ty::<Self>()?;
 
@@ -380,14 +517,26 @@ impl Pad {
         module.function_meta(Self::down)?;
         module.function_meta(Self::press)?;
         module.function_meta(Self::release)?;
+        module.function_meta(Self::axis)?;
+        module.function_meta(Self::name)?;
+
+        for (i, key) in Self::LIST_KEY.iter().enumerate() {
+            module.constant(key, i).build()?;
+        }
+
+        for (i, key) in Self::LIST_AXIS.iter().enumerate() {
+            module.constant(key, i).build()?;
+        }
 
         Ok(())
     }
 
     //================================================================
 
-    fn get_index(state: &State, index: usize) -> anyhow::Result<&Button> {
-        if let Some(button) = state.input.pad.data.get(index) {
+    fn get_index(state: &State, which: usize, index: usize) -> anyhow::Result<&Button> {
+        if let Some((_, pad)) = state.input.pad.get_pad(which)
+            && let Some(button) = pad.button.get(index)
+        {
             Ok(button)
         } else {
             Err(anyhow::Error::msg(format!(
@@ -398,26 +547,52 @@ impl Pad {
 
     #[rune::function(path = Self::up)]
     /// Get the state of a pad input (up).
-    fn up(state: &State, index: usize) -> anyhow::Result<bool> {
-        Ok(!Self::get_index(state, index)?.down)
+    fn up(state: &State, which: usize, index: usize) -> anyhow::Result<bool> {
+        Ok(!Self::get_index(state, which, index)?.down)
     }
 
     #[rune::function(path = Self::down)]
     /// Get the state of a pad input (down).
-    fn down(state: &State, index: usize) -> anyhow::Result<bool> {
-        Ok(Self::get_index(state, index)?.down)
+    fn down(state: &State, which: usize, index: usize) -> anyhow::Result<bool> {
+        Ok(Self::get_index(state, which, index)?.down)
     }
 
     #[rune::function(path = Self::press)]
     /// Get the state of a pad input (press).
-    fn press(state: &State, index: usize) -> anyhow::Result<bool> {
-        Ok(Self::get_index(state, index)?.press)
+    fn press(state: &State, which: usize, index: usize) -> anyhow::Result<bool> {
+        Ok(Self::get_index(state, which, index)?.press)
     }
 
     #[rune::function(path = Self::release)]
     /// Get the state of a pad input (release).
-    fn release(state: &State, index: usize) -> anyhow::Result<bool> {
-        Ok(Self::get_index(state, index)?.release)
+    fn release(state: &State, which: usize, index: usize) -> anyhow::Result<bool> {
+        Ok(Self::get_index(state, which, index)?.release)
+    }
+
+    #[rune::function(path = Self::axis)]
+    fn axis(state: &State, which: usize, index: usize) -> anyhow::Result<f32> {
+        if let Some((_, pad)) = state.input.pad.get_pad(which)
+            && let Some(axis) = pad.axis.get(index)
+        {
+            return Ok(*axis);
+        }
+
+        Err(anyhow::Error::msg(format!(
+            "Pad(): Invalid index for pad: {which}"
+        )))
+    }
+
+    #[rune::function(path = Self::name)]
+    fn name(state: &State, which: usize) -> anyhow::Result<String> {
+        if let Some((identifier, _)) = state.input.pad.get_pad(which) {
+            let pad = state.input.pad.handle.gamepad(*identifier);
+
+            return Ok(pad.name().to_string());
+        }
+
+        Err(anyhow::Error::msg(format!(
+            "Pad(): Invalid index for pad: {which}"
+        )))
     }
 }
 

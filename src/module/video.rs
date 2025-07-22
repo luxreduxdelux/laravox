@@ -89,7 +89,8 @@ pub struct Frame {
     side_texture_color: Vec<three_d::Vector4<f32>>,
 
     // shader program.
-    program: three_d::Program,
+    program_active: Option<Arc<three_d::Program>>,
+    program_normal: three_d::Program,
 }
 
 impl Frame {
@@ -103,6 +104,7 @@ impl Frame {
         module.ty::<Self>()?;
 
         module.function_meta(Self::new)?;
+        module.function_meta(Self::set_shader)?;
         module.function_meta(Self::draw)?;
         module.function_meta(Self::draw_to)?;
         module.function_meta(Self::draw_box)?;
@@ -154,8 +156,18 @@ impl Frame {
             side_vertex_point,
             side_texture_point,
             side_texture_color,
-            program,
+            program_active: None,
+            program_normal: program,
         }
+    }
+
+    #[rune::function]
+    fn set_shader(&mut self, shader: &Shader) {
+        // TO-DO check if the given shader is not the same as the current active shader.
+        // if it is the same, then don't flush at all.
+        self.flush();
+
+        self.program_active = Some(shader.data.clone());
     }
 
     #[rune::function]
@@ -185,6 +197,8 @@ impl Frame {
                 Ok(())
             })
             .unwrap();
+
+        self.program_active = None;
 
         result
     }
@@ -254,6 +268,8 @@ impl Frame {
 
         // TO-DO there's probably a better way to go about this...
         render.data = Arc::new(Texture2D::new(&state.frame.context, &texture));
+
+        self.program_active = None;
 
         value
     }
@@ -469,15 +485,21 @@ impl Frame {
             self.main_texture_point.fill(&self.side_texture_point);
             self.main_texture_color.fill(&self.side_texture_color);
 
+            let program = if let Some(program) = &self.program_active {
+                program
+            } else {
+                &self.program_normal
+            };
+
             // set every uniform, attribute.
-            self.program.use_uniform(Self::VIEW_PROJECTION, camera.projection() * camera.view());
-            self.program.use_texture(Self::TEXTURE_SAMPLE, self_image);
-            self.program.use_vertex_attribute(Self::VERTEX_POINT, &self.main_vertex_point);
-            self.program.use_vertex_attribute(Self::TEXTURE_POINT, &self.main_texture_point);
-            self.program.use_vertex_attribute(Self::TEXTURE_COLOR, &self.main_texture_color);
+            program.use_uniform(Self::VIEW_PROJECTION, camera.projection() * camera.view());
+            program.use_texture(Self::TEXTURE_SAMPLE, self_image);
+            program.use_vertex_attribute(Self::VERTEX_POINT, &self.main_vertex_point);
+            program.use_vertex_attribute(Self::TEXTURE_POINT, &self.main_texture_point);
+            program.use_vertex_attribute(Self::TEXTURE_COLOR, &self.main_texture_color);
 
             // render the batch.
-            self.program.draw_arrays(
+            program.draw_arrays(
                 RenderStates {
                     write_mask: WriteMask::COLOR,
                     blend: Blend::TRANSPARENCY,
@@ -492,6 +514,58 @@ impl Frame {
             self.side_texture_point.clear();
             self.side_texture_color.clear();
         }
+    }
+}
+
+//================================================================
+
+#[derive(Any)]
+#[rune(item = ::video)]
+struct Shader {
+    #[allow(dead_code)]
+    data: Arc<three_d::Program>,
+}
+
+impl Shader {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::new)?;
+
+        Ok(())
+    }
+
+    //================================================================
+
+    #[rune::function(path = Self::new)]
+    fn new(
+        state: &State,
+        path_vs: Option<String>,
+        path_fs: Option<String>,
+    ) -> anyhow::Result<Self> {
+        use three_d::*;
+
+        let path_vs = {
+            if let Some(path_vs) = path_vs {
+                &std::fs::read_to_string(path_vs)?
+            } else {
+                include_str!("../../data/base.vs")
+            }
+        };
+
+        let path_fs = {
+            if let Some(path_fs) = path_fs {
+                &std::fs::read_to_string(path_fs)?
+            } else {
+                include_str!("../../data/base.vs")
+            }
+        };
+
+        let program = Program::from_source(&state.frame.context, path_vs, path_fs).unwrap();
+
+        Ok(Self {
+            data: Arc::new(program),
+        })
     }
 }
 
@@ -791,48 +865,6 @@ impl Image {
             x: self.data.width() as f32,
             y: self.data.height() as f32,
         }
-    }
-}
-
-//================================================================
-
-#[derive(Any)]
-#[rune(item = ::video)]
-struct Shader {
-    #[allow(dead_code)]
-    data: Arc<three_d::Program>,
-}
-
-impl Shader {
-    #[rune::function(path = Self::new)]
-    fn new(
-        state: &State,
-        path_vs: Option<String>,
-        path_fs: Option<String>,
-    ) -> anyhow::Result<Self> {
-        use three_d::*;
-
-        let path_vs = {
-            if let Some(path_vs) = path_vs {
-                &std::fs::read_to_string(path_vs)?
-            } else {
-                include_str!("../../data/base.vs")
-            }
-        };
-
-        let path_fs = {
-            if let Some(path_fs) = path_fs {
-                &std::fs::read_to_string(path_fs)?
-            } else {
-                include_str!("../../data/base.vs")
-            }
-        };
-
-        let program = Program::from_source(&state.frame.context, path_vs, path_fs).unwrap();
-
-        Ok(Self {
-            data: Arc::new(program),
-        })
     }
 }
 
@@ -1170,6 +1202,7 @@ pub fn module() -> anyhow::Result<Module> {
     let mut module = Module::from_meta(self::module_meta)?;
 
     Frame::module(&mut module)?;
+    Shader::module(&mut module)?;
     Camera::module(&mut module)?;
     Render::module(&mut module)?;
     Image::module(&mut module)?;

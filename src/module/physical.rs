@@ -169,19 +169,60 @@ impl Physical2D {
 #[allow(dead_code)]
 struct DebugRender<'a>(&'a mut crate::module::video::Frame);
 
+fn hsl_to_rgb(h: f32, s: f32, l: f32, a: f32) -> Color {
+    let h = h / 360.0;
+
+    let hue_to_rgb = |p, q, mut t| {
+        if t < 0.0 {
+            t += 1.0;
+        };
+        if t > 1.0 {
+            t -= 1.0;
+        };
+        if t < 1.0 / 6.0 {
+            return p + (q - p) * 6.0 * t;
+        };
+        if t < 1.0 / 2.0 {
+            return q;
+        };
+        if t < 2.0 / 3.0 {
+            return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+        };
+
+        p
+    };
+
+    let mut r = l;
+    let mut g = l;
+    let mut b = l;
+
+    if s != 0.0 {
+        let q = if l < 0.5 {
+            l * (1.0 + s)
+        } else {
+            l + s - l * s
+        };
+        let p = 2.0 * l - q;
+        r = hue_to_rgb(p, q, h + 1.0 / 3.0);
+        g = hue_to_rgb(p, q, h);
+        b = hue_to_rgb(p, q, h - 1.0 / 3.0);
+    }
+
+    Color::rust_new(
+        (r * 255.0) as u8,
+        (g * 255.0) as u8,
+        (b * 255.0) as u8,
+        (a * 255.0) as u8,
+    )
+}
+
 impl<'a> DebugRenderBackend for DebugRender<'a> {
-    fn draw_line(
-        &mut self,
-        _object: DebugRenderObject,
-        a: Point<f32>,
-        b: Point<f32>,
-        _color: DebugColor,
-    ) {
+    fn draw_line(&mut self, _: DebugRenderObject, a: Point<f32>, b: Point<f32>, color: DebugColor) {
         self.0.rust_draw_line(
             &Vec2::rust_new(a.x, a.y),
             &Vec2::rust_new(b.x, b.y),
             1,
-            &Color::rust_new(0, 255, 0, 255),
+            &hsl_to_rgb(color[0], color[1], color[2], color[3]),
         );
     }
 }
