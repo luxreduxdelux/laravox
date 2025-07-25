@@ -58,6 +58,7 @@ use std::{fs::File, sync::Arc};
 
 //================================================================
 
+/// A handle to a sound file.
 #[derive(Any)]
 #[rune(item = ::audio)]
 struct Sound {
@@ -84,6 +85,7 @@ impl Sound {
 
     //================================================================
 
+    /// Create a new sound instance.
     #[rune::function(path = Self::new)]
     fn new(state: &State, path: &str) -> anyhow::Result<Self> {
         let data = std::fs::read(path)?;
@@ -100,6 +102,7 @@ impl Sound {
         })
     }
 
+    /// Play the track.
     #[rune::function]
     fn play(&mut self) -> anyhow::Result<()> {
         let data = std::io::Cursor::new(SoundData(self.data.0.clone()));
@@ -111,36 +114,43 @@ impl Sound {
         Ok(())
     }
 
+    /// Stop the track.
     #[rune::function]
     fn stop(&mut self) {
         self.sink.stop();
     }
 
+    /// Pause the track.
     #[rune::function]
     fn pause(&mut self) {
         self.sink.pause();
     }
 
+    /// Resume the track.
     #[rune::function]
     fn resume(&mut self) {
         self.sink.play();
     }
 
+    /// Get current playing state. If true, track is currently playing, false otherwise.
     #[rune::function]
-    fn get_state(&mut self) {
-        self.sink.is_paused();
+    fn get_state(&mut self) -> bool {
+        !self.sink.is_paused()
     }
 
+    /// Set track volume.
     #[rune::function]
     fn set_volume(&mut self, volume: f32) {
         self.sink.set_volume(volume);
     }
 
+    /// Set track speed.
     #[rune::function]
     fn set_speed(&mut self, speed: f32) {
         self.sink.set_speed(speed);
     }
 
+    /// Set track panning, with `point_source` being the source of the emitter, and `point_target` being the listener's point.
     #[rune::function]
     fn set_point(&mut self, point_source: &Vec2, point_target: &Vec2) {
         self.sink
@@ -162,6 +172,7 @@ impl AsRef<[u8]> for SoundData {
 
 //================================================================
 
+/// A handle to a music file.
 #[derive(Any)]
 #[rune(item = ::audio)]
 struct Music {
@@ -188,6 +199,7 @@ impl Music {
 
     //================================================================
 
+    /// Create a new music instance.
     #[rune::function(path = Self::new)]
     fn new(state: &State, path: &str) -> anyhow::Result<Self> {
         let data = File::open(path)?;
@@ -201,6 +213,7 @@ impl Music {
         Ok(Self { data, sink })
     }
 
+    /// Play the track.
     #[rune::function]
     fn play(&mut self) -> anyhow::Result<()> {
         self.sink.stop();
@@ -211,36 +224,43 @@ impl Music {
         Ok(())
     }
 
+    /// Stop the track.
     #[rune::function]
     fn stop(&mut self) {
         self.sink.stop();
     }
 
+    /// Pause the track.
     #[rune::function]
     fn pause(&mut self) {
         self.sink.pause();
     }
 
+    /// Resume the track.
     #[rune::function]
     fn resume(&mut self) {
         self.sink.play();
     }
 
+    /// Get current playing state. If true, track is currently playing, false otherwise.
     #[rune::function]
-    fn get_state(&mut self) {
-        self.sink.is_paused();
+    fn get_state(&mut self) -> bool {
+        !self.sink.is_paused()
     }
 
+    /// Set track volume.
     #[rune::function]
     fn set_volume(&mut self, volume: f32) {
         self.sink.set_volume(volume);
     }
 
+    /// Set track speed.
     #[rune::function]
     fn set_speed(&mut self, speed: f32) {
         self.sink.set_speed(speed);
     }
 
+    /// Set track panning, with `point_source` being the source of the emitter, and `point_target` being the listener's point.
     #[rune::function]
     fn set_point(&mut self, point_source: &Vec2, point_target: &Vec2) {
         self.sink

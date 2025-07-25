@@ -79,66 +79,77 @@ pub fn module() -> anyhow::Result<Module> {
 
 //================================================================
 
+/// Canonicalize a path.
 #[rune::function]
 #[inline]
 fn canonicalize(path: String) -> anyhow::Result<String> {
     Ok(fs::canonicalize(&path).map(|x| x.display().to_string())?)
 }
 
+/// Copy a file to a different path.
 #[rune::function]
 #[inline]
 fn copy(from: String, to: String) -> anyhow::Result<u64> {
     Ok(fs::copy(&from, &to)?)
 }
 
+/// Create a new folder.
 #[rune::function]
 #[inline]
 fn create_path(path: String) -> anyhow::Result<()> {
     Ok(fs::create_dir(&path)?)
 }
 
+/// Create a new folder, recursively creating a folder (or more) inside of the first folder.
 #[rune::function]
 #[inline]
 fn create_path_all(path: String) -> anyhow::Result<()> {
     Ok(fs::create_dir_all(&path)?)
 }
 
+/// Check if a path does exist.
 #[rune::function]
 #[inline]
 fn check(path: String) -> anyhow::Result<bool> {
     Ok(fs::exists(&path)?)
 }
 
+/// Read the data of a file as binary data.
 #[rune::function]
 #[inline]
 fn read(path: String) -> anyhow::Result<Vec<u8>> {
     Ok(fs::read(&path)?)
 }
 
+/// Read the data of a file as a string.
 #[rune::function]
 #[inline]
 fn read_to_string(path: String) -> anyhow::Result<String> {
     Ok(fs::read_to_string(&path)?)
 }
 
+/// Remove a folder, which is empty.
 #[rune::function]
 #[inline]
 fn remove_path(path: String) -> anyhow::Result<()> {
     Ok(fs::remove_dir(&path)?)
 }
 
+/// Remove a folder, which may not be empty.
 #[rune::function]
 #[inline]
 fn remove_path_all(path: String) -> anyhow::Result<()> {
     Ok(fs::remove_dir_all(&path)?)
 }
 
+/// Remove a file.
 #[rune::function]
 #[inline]
 fn remove_file(path: String) -> anyhow::Result<()> {
     Ok(fs::remove_file(&path)?)
 }
 
+/// Rename a file, or folder.
 #[rune::function]
 #[inline]
 fn rename(from: String, to: String) -> anyhow::Result<()> {

@@ -52,181 +52,182 @@ use crate::script::{Button, State};
 
 //================================================================
 
-use rune::{Any, Module};
+use rune::{Any, Module, docstring};
 
 use super::general::Vec2;
 
 //================================================================
 
+/// Accessor for getting data about the current board.
 #[derive(Any)]
 #[rune(item = ::input)]
 struct Board {}
 
 impl Board {
     const LIST_KEY: [&str; 163] = [
-        "BOARD_1",
-        "BOARD_2",
-        "BOARD_3",
-        "BOARD_4",
-        "BOARD_5",
-        "BOARD_6",
-        "BOARD_7",
-        "BOARD_8",
-        "BOARD_9",
-        "BOARD_0",
-        "BOARD_A",
-        "BOARD_B",
-        "BOARD_C",
-        "BOARD_D",
-        "BOARD_E",
-        "BOARD_F",
-        "BOARD_G",
-        "BOARD_H",
-        "BOARD_I",
-        "BOARD_J",
-        "BOARD_K",
-        "BOARD_L",
-        "BOARD_M",
-        "BOARD_N",
-        "BOARD_O",
-        "BOARD_P",
-        "BOARD_Q",
-        "BOARD_R",
-        "BOARD_S",
-        "BOARD_T",
-        "BOARD_U",
-        "BOARD_V",
-        "BOARD_W",
-        "BOARD_X",
-        "BOARD_Y",
-        "BOARD_Z",
-        "BOARD_ESCAPE",
-        "BOARD_F1",
-        "BOARD_F2",
-        "BOARD_F3",
-        "BOARD_F4",
-        "BOARD_F5",
-        "BOARD_F6",
-        "BOARD_F7",
-        "BOARD_F8",
-        "BOARD_F9",
-        "BOARD_F10",
-        "BOARD_F11",
-        "BOARD_F12",
-        "BOARD_F13",
-        "BOARD_F14",
-        "BOARD_F15",
-        "BOARD_F16",
-        "BOARD_F17",
-        "BOARD_F18",
-        "BOARD_F19",
-        "BOARD_F20",
-        "BOARD_F21",
-        "BOARD_F22",
-        "BOARD_F23",
-        "BOARD_F24",
-        "BOARD_SNAPSHOT",
-        "BOARD_SCROLL",
-        "BOARD_PAUSE",
-        "BOARD_INSERT",
-        "BOARD_HOME",
-        "BOARD_DELETE",
-        "BOARD_END",
-        "BOARD_PAGE_DOWN",
-        "BOARD_PAGE_UP",
-        "BOARD_LEFT",
-        "BOARD_UP",
-        "BOARD_RIGHT",
-        "BOARD_DOWN",
-        "BOARD_BACK",
-        "BOARD_RETURN",
-        "BOARD_SPACE",
-        "BOARD_COMPOSE",
-        "BOARD_CARET",
-        "BOARD_NUMBER_LOCK",
-        "BOARD_NUMBER_PAD_0",
-        "BOARD_NUMBER_PAD_1",
-        "BOARD_NUMBER_PAD_2",
-        "BOARD_NUMBER_PAD_3",
-        "BOARD_NUMBER_PAD_4",
-        "BOARD_NUMBER_PAD_5",
-        "BOARD_NUMBER_PAD_6",
-        "BOARD_NUMBER_PAD_7",
-        "BOARD_NUMBER_PAD_8",
-        "BOARD_NUMBER_PAD_9",
-        "BOARD_NUMBER_PAD_ADD",
-        "BOARD_NUMBER_PAD_DIVIDE",
-        "BOARD_NUMBER_PAD_DECIMAL",
-        "BOARD_NUMBER_PAD_COMMA",
-        "BOARD_NUMBER_PAD_ENTER",
-        "BOARD_NUMBER_PAD_EQUAL",
-        "BOARD_NUMBER_PAD_MULTIPLY",
-        "BOARD_NUMBER_PAD_SUBTRACT",
-        "BOARD_ABNTC1",
-        "BOARD_ABNTC2",
-        "BOARD_APOSTROPHE",
-        "BOARD_APPS",
-        "BOARD_ASTERISK",
-        "BOARD_AT",
-        "BOARD_AX",
-        "BOARD_BACKSLASH",
-        "BOARD_CALCULATOR",
-        "BOARD_CAPITAL",
-        "BOARD_COLON",
-        "BOARD_COMMA",
-        "BOARD_CONVERT",
-        "BOARD_EQUALS",
-        "BOARD_GRAVE",
-        "BOARD_KANA",
-        "BOARD_KANJI",
-        "BOARD_LEFT_ALTERNATE",
-        "BOARD_LEFT_BRACKET",
-        "BOARD_LEFT_CONTROL",
-        "BOARD_LEFT_SHIFT",
-        "BOARD_LEFT_SUPER",
-        "BOARD_MAIL",
-        "BOARD_MEDIA_SELECT",
-        "BOARD_MEDIA_STOP",
-        "BOARD_MINUS",
-        "BOARD_MUTE",
-        "BOARD_MY_COMPUTER",
-        "BOARD_NAVIGATE_FORWARD",
-        "BOARD_NAVIGATE_BACKWARD",
-        "BOARD_NEXT_TRACK",
-        "BOARD_NO_CONVERT",
-        "BOARD_OEM102",
-        "BOARD_PERIOD",
-        "BOARD_PLAY_PAUSE",
-        "BOARD_PLUS",
-        "BOARD_POWER",
-        "BOARD_PREVIOUS_TRACK",
-        "BOARD_RIGHT_ALTERNATE",
-        "BOARD_RIGHT_BRACKET",
-        "BOARD_RIGHT_CONTROL",
-        "BOARD_RIGHT_SHIFT",
-        "BOARD_RIGHT_SUPER",
-        "BOARD_SEMICOLON",
-        "BOARD_SLASH",
-        "BOARD_SLEEP",
-        "BOARD_STOP",
-        "BOARD_SYSRQ",
-        "BOARD_TAB",
-        "BOARD_UNDERLINE",
-        "BOARD_NO_LABEL",
-        "BOARD_VOLUME_DOWN",
-        "BOARD_VOLUME_UP",
-        "BOARD_WAKE",
-        "BOARD_WEB_BACK",
-        "BOARD_WEB_FAVORITES",
-        "BOARD_WEB_FORWARD",
-        "BOARD_WEB_HOME",
-        "BOARD_WEB_REFRESH",
-        "BOARD_WEB_SEARCH",
-        "BOARD_WEB_STOP",
-        "BOARD_YEN",
-        "BOARD_COPY",
-        "BOARD_PASTE",
-        "BOARD_CUT",
+        "KEY_1",
+        "KEY_2",
+        "KEY_3",
+        "KEY_4",
+        "KEY_5",
+        "KEY_6",
+        "KEY_7",
+        "KEY_8",
+        "KEY_9",
+        "KEY_0",
+        "KEY_A",
+        "KEY_B",
+        "KEY_C",
+        "KEY_D",
+        "KEY_E",
+        "KEY_F",
+        "KEY_G",
+        "KEY_H",
+        "KEY_I",
+        "KEY_J",
+        "KEY_K",
+        "KEY_L",
+        "KEY_M",
+        "KEY_N",
+        "KEY_O",
+        "KEY_P",
+        "KEY_Q",
+        "KEY_R",
+        "KEY_S",
+        "KEY_T",
+        "KEY_U",
+        "KEY_V",
+        "KEY_W",
+        "KEY_X",
+        "KEY_Y",
+        "KEY_Z",
+        "KEY_ESCAPE",
+        "KEY_F1",
+        "KEY_F2",
+        "KEY_F3",
+        "KEY_F4",
+        "KEY_F5",
+        "KEY_F6",
+        "KEY_F7",
+        "KEY_F8",
+        "KEY_F9",
+        "KEY_F10",
+        "KEY_F11",
+        "KEY_F12",
+        "KEY_F13",
+        "KEY_F14",
+        "KEY_F15",
+        "KEY_F16",
+        "KEY_F17",
+        "KEY_F18",
+        "KEY_F19",
+        "KEY_F20",
+        "KEY_F21",
+        "KEY_F22",
+        "KEY_F23",
+        "KEY_F24",
+        "KEY_SNAPSHOT",
+        "KEY_SCROLL",
+        "KEY_PAUSE",
+        "KEY_INSERT",
+        "KEY_HOME",
+        "KEY_DELETE",
+        "KEY_END",
+        "KEY_PAGE_DOWN",
+        "KEY_PAGE_UP",
+        "KEY_LEFT",
+        "KEY_UP",
+        "KEY_RIGHT",
+        "KEY_DOWN",
+        "KEY_BACK",
+        "KEY_RETURN",
+        "KEY_SPACE",
+        "KEY_COMPOSE",
+        "KEY_CARET",
+        "KEY_NUMBER_LOCK",
+        "KEY_NUMBER_PAD_0",
+        "KEY_NUMBER_PAD_1",
+        "KEY_NUMBER_PAD_2",
+        "KEY_NUMBER_PAD_3",
+        "KEY_NUMBER_PAD_4",
+        "KEY_NUMBER_PAD_5",
+        "KEY_NUMBER_PAD_6",
+        "KEY_NUMBER_PAD_7",
+        "KEY_NUMBER_PAD_8",
+        "KEY_NUMBER_PAD_9",
+        "KEY_NUMBER_PAD_ADD",
+        "KEY_NUMBER_PAD_DIVIDE",
+        "KEY_NUMBER_PAD_DECIMAL",
+        "KEY_NUMBER_PAD_COMMA",
+        "KEY_NUMBER_PAD_ENTER",
+        "KEY_NUMBER_PAD_EQUAL",
+        "KEY_NUMBER_PAD_MULTIPLY",
+        "KEY_NUMBER_PAD_SUBTRACT",
+        "KEY_ABNTC1",
+        "KEY_ABNTC2",
+        "KEY_APOSTROPHE",
+        "KEY_APPS",
+        "KEY_ASTERISK",
+        "KEY_AT",
+        "KEY_AX",
+        "KEY_BACKSLASH",
+        "KEY_CALCULATOR",
+        "KEY_CAPITAL",
+        "KEY_COLON",
+        "KEY_COMMA",
+        "KEY_CONVERT",
+        "KEY_EQUALS",
+        "KEY_GRAVE",
+        "KEY_KANA",
+        "KEY_KANJI",
+        "KEY_LEFT_ALTERNATE",
+        "KEY_LEFT_BRACKET",
+        "KEY_LEFT_CONTROL",
+        "KEY_LEFT_SHIFT",
+        "KEY_LEFT_SUPER",
+        "KEY_MAIL",
+        "KEY_MEDIA_SELECT",
+        "KEY_MEDIA_STOP",
+        "KEY_MINUS",
+        "KEY_MUTE",
+        "KEY_MY_COMPUTER",
+        "KEY_NAVIGATE_FORWARD",
+        "KEY_NAVIGATE_BACKWARD",
+        "KEY_NEXT_TRACK",
+        "KEY_NO_CONVERT",
+        "KEY_OEM102",
+        "KEY_PERIOD",
+        "KEY_PLAY_PAUSE",
+        "KEY_PLUS",
+        "KEY_POWER",
+        "KEY_PREVIOUS_TRACK",
+        "KEY_RIGHT_ALTERNATE",
+        "KEY_RIGHT_BRACKET",
+        "KEY_RIGHT_CONTROL",
+        "KEY_RIGHT_SHIFT",
+        "KEY_RIGHT_SUPER",
+        "KEY_SEMICOLON",
+        "KEY_SLASH",
+        "KEY_SLEEP",
+        "KEY_STOP",
+        "KEY_SYSRQ",
+        "KEY_TAB",
+        "KEY_UNDERLINE",
+        "KEY_NO_LABEL",
+        "KEY_VOLUME_DOWN",
+        "KEY_VOLUME_UP",
+        "KEY_WAKE",
+        "KEY_WEB_BACK",
+        "KEY_WEB_FAVORITES",
+        "KEY_WEB_FORWARD",
+        "KEY_WEB_HOME",
+        "KEY_WEB_REFRESH",
+        "KEY_WEB_SEARCH",
+        "KEY_WEB_STOP",
+        "KEY_YEN",
+        "KEY_COPY",
+        "KEY_PASTE",
+        "KEY_CUT",
     ];
 
     fn module(module: &mut Module) -> anyhow::Result<()> {
@@ -241,7 +242,12 @@ impl Board {
         module.function_meta(Self::key_name)?;
 
         for (i, key) in Self::LIST_KEY.iter().enumerate() {
-            module.constant(key, i).build()?;
+            module
+                .constant(*key, i)
+                .build_associated::<Self>()?
+                .docs(docstring! {
+                    /// Board key.
+                })?;
         }
 
         Ok(())
@@ -259,40 +265,43 @@ impl Board {
         }
     }
 
+    /// Get the state of a board input (up).
     #[rune::function(path = Self::up)]
-    /// Get the state of a key-board input (up).
     fn up(state: &State, index: usize) -> anyhow::Result<bool> {
         Ok(!Self::get_index(state, index)?.down)
     }
 
+    /// Get the state of a board input (down).
     #[rune::function(path = Self::down)]
-    /// Get the state of a key-board input (down).
     fn down(state: &State, index: usize) -> anyhow::Result<bool> {
         Ok(Self::get_index(state, index)?.down)
     }
 
+    /// Get the state of a board input (press).
     #[rune::function(path = Self::press)]
-    /// Get the state of a key-board input (press).
     fn press(state: &State, index: usize) -> anyhow::Result<bool> {
         Ok(Self::get_index(state, index)?.press)
     }
 
+    /// Get the state of a board input (release).
     #[rune::function(path = Self::release)]
-    /// Get the state of a key-board input (release).
     fn release(state: &State, index: usize) -> anyhow::Result<bool> {
         Ok(Self::get_index(state, index)?.release)
     }
 
+    /// Get the last key press.
     #[rune::function(path = Self::last_press)]
     fn last_press(state: &State) -> Option<usize> {
         state.input.board.last_press
     }
 
+    /// Get the last key release.
     #[rune::function(path = Self::last_release)]
     fn last_release(state: &State) -> Option<usize> {
         state.input.board.last_release
     }
 
+    /// Get a human-readable name for a key.
     #[rune::function(path = Self::key_name)]
     fn key_name(key: usize) -> anyhow::Result<String> {
         if let Some(name) = Self::LIST_KEY.get(key) {
@@ -307,54 +316,55 @@ impl Board {
 
 //================================================================
 
+/// Accessor for getting data about the current mouse.
 #[derive(Any)]
 #[rune(item = ::input)]
 struct Mouse {}
 
 impl Mouse {
     const LIST_KEY: [&str; 5] = [
-        "MOUSE_LEFT",
-        "MOUSE_RIGHT",
-        "MOUSE_MIDDLE",
-        "MOUSE_BACK",
-        "MOUSE_FORWARD",
+        "KEY_LEFT",
+        "KEY_RIGHT",
+        "KEY_MIDDLE",
+        "KEY_BACK",
+        "KEY_FORWARD",
     ];
 
     const LIST_ICON: [&str; 34] = [
-        "MOUSE_ICON_DEFAULT",
-        "MOUSE_ICON_CONTEXT_MENU",
-        "MOUSE_ICON_HELP",
-        "MOUSE_ICON_POINTER",
-        "MOUSE_ICON_PROGRESS",
-        "MOUSE_ICON_WAIT",
-        "MOUSE_ICON_CELL",
-        "MOUSE_ICON_CROSSHAIR",
-        "MOUSE_ICON_TEXT",
-        "MOUSE_ICON_VERTICAL_TEXT",
-        "MOUSE_ICON_ALIAS",
-        "MOUSE_ICON_COPY",
-        "MOUSE_ICON_MOVE",
-        "MOUSE_ICON_NO_DROP",
-        "MOUSE_ICON_NOT_ALLOWED",
-        "MOUSE_ICON_GRAB",
-        "MOUSE_ICON_GRABBING",
-        "MOUSE_ICON_E_RESIZE",
-        "MOUSE_ICON_N_RESIZE",
-        "MOUSE_ICON_NE_RESIZE",
-        "MOUSE_ICON_NW_RESIZE",
-        "MOUSE_ICON_SR_ESIZE",
-        "MOUSE_ICON_SE_RESIZE",
-        "MOUSE_ICON_SW_RESIZE",
-        "MOUSE_ICON_W_RESIZE",
-        "MOUSE_ICON_EW_RESIZE",
-        "MOUSE_ICON_NS_RESIZE",
-        "MOUSE_ICON_NE_SW_RESIZE",
-        "MOUSE_ICON_NW_SERESIZE",
-        "MOUSE_ICON_COL_RESIZE",
-        "MOUSE_ICON_ROW_RESIZE",
-        "MOUSE_ICON_ALL_SCROLL",
-        "MOUSE_ICON_ZOOM_IN",
-        "MOUSE_ICON_ZOOM_OUT",
+        "ICON_DEFAULT",
+        "ICON_CONTEXT_MENU",
+        "ICON_HELP",
+        "ICON_POINTER",
+        "ICON_PROGRESS",
+        "ICON_WAIT",
+        "ICON_CELL",
+        "ICON_CROSSHAIR",
+        "ICON_TEXT",
+        "ICON_VERTICAL_TEXT",
+        "ICON_ALIAS",
+        "ICON_COPY",
+        "ICON_MOVE",
+        "ICON_NO_DROP",
+        "ICON_NOT_ALLOWED",
+        "ICON_GRAB",
+        "ICON_GRABBING",
+        "ICON_E_RESIZE",
+        "ICON_N_RESIZE",
+        "ICON_NE_RESIZE",
+        "ICON_NW_RESIZE",
+        "ICON_SR_ESIZE",
+        "ICON_SE_RESIZE",
+        "ICON_SW_RESIZE",
+        "ICON_W_RESIZE",
+        "ICON_EW_RESIZE",
+        "ICON_NS_RESIZE",
+        "ICON_NE_SW_RESIZE",
+        "ICON_NW_SERESIZE",
+        "ICON_COL_RESIZE",
+        "ICON_ROW_RESIZE",
+        "ICON_ALL_SCROLL",
+        "ICON_ZOOM_IN",
+        "ICON_ZOOM_OUT",
     ];
 
     fn module(module: &mut Module) -> anyhow::Result<()> {
@@ -374,11 +384,21 @@ impl Mouse {
         module.function_meta(Self::lock)?;
 
         for (i, key) in Self::LIST_KEY.iter().enumerate() {
-            module.constant(key, i).build()?;
+            module
+                .constant(*key, i)
+                .build_associated::<Self>()?
+                .docs(docstring! {
+                    /// Mouse key.
+                })?;
         }
 
         for (i, key) in Self::LIST_ICON.iter().enumerate() {
-            module.constant(key, i).build()?;
+            module
+                .constant(*key, i)
+                .build_associated::<Self>()?
+                .docs(docstring! {
+                    /// Mouse icon.
+                })?;
         }
 
         Ok(())
@@ -396,55 +416,61 @@ impl Mouse {
         }
     }
 
-    #[rune::function(path = Self::up)]
     /// Get the state of a mouse input (up).
+    #[rune::function(path = Self::up)]
     fn up(state: &State, index: usize) -> anyhow::Result<bool> {
         Ok(!Self::get_index(state, index)?.down)
     }
 
-    #[rune::function(path = Self::down)]
     /// Get the state of a mouse input (down).
+    #[rune::function(path = Self::down)]
     fn down(state: &State, index: usize) -> anyhow::Result<bool> {
         Ok(Self::get_index(state, index)?.down)
     }
 
-    #[rune::function(path = Self::press)]
     /// Get the state of a mouse input (press).
+    #[rune::function(path = Self::press)]
     fn press(state: &State, index: usize) -> anyhow::Result<bool> {
         Ok(Self::get_index(state, index)?.press)
     }
 
-    #[rune::function(path = Self::release)]
     /// Get the state of a mouse input (release).
+    #[rune::function(path = Self::release)]
     fn release(state: &State, index: usize) -> anyhow::Result<bool> {
         Ok(Self::get_index(state, index)?.release)
     }
 
+    /// Get the last key press.
     #[rune::function(path = Self::last_press)]
     fn last_press(state: &State) -> Option<usize> {
         state.input.mouse.last_press
     }
 
+    /// Get the last key release.
     #[rune::function(path = Self::last_release)]
     fn last_release(state: &State) -> Option<usize> {
         state.input.mouse.last_release
     }
 
+    /// Get the point of the mouse cursor on screen.
     #[rune::function(path = Self::point)]
     fn point(state: &State) -> Vec2 {
         state.input.mouse.point
     }
 
+    /// Get the delta of the mouse cursor in the last frame.
     #[rune::function(path = Self::delta)]
     fn delta(state: &State) -> Vec2 {
         state.input.mouse.delta
     }
 
+    /// Get the delta of the mouse wheel in the last frame.
     #[rune::function(path = Self::wheel)]
     fn wheel(state: &State) -> Vec2 {
         state.input.mouse.wheel
     }
 
+    /// Set the mouse cursor icon. Index must be in the range of [0, 33]. Refer to the Mouse::ICON_* constant family.
     #[rune::function(path = Self::icon)]
     fn icon(state: &mut State, index: usize) -> anyhow::Result<()> {
         if index < Self::LIST_ICON.len() {
@@ -457,11 +483,13 @@ impl Mouse {
         )))
     }
 
+    /// Show the mouse cursor.
     #[rune::function(path = Self::show)]
     fn show(state: &mut State, value: bool) {
         state.input.window_set.cursor_show = Some(value);
     }
 
+    /// Lock the mouse cursor.
     #[rune::function(path = Self::lock)]
     fn lock(state: &mut State, value: bool) {
         state.input.window_set.cursor_lock = Some(value);
@@ -470,44 +498,45 @@ impl Mouse {
 
 //================================================================
 
+/// Accessor for getting data about a pad.
 #[derive(Any)]
 #[rune(item = ::input)]
 struct Pad {}
 
 impl Pad {
     const LIST_KEY: [&str; 20] = [
-        "PAD_SOUTH",
-        "PAD_EAST",
-        "PAD_NORTH",
-        "PAD_WEST",
-        "PAD_C",
-        "PAD_Z",
-        "PAD_LEFT_BUMPER",
-        "PAD_LEFT_TRIGGER",
-        "PAD_RIGHT_BUMPER",
-        "PAD_RIGHT_TRIGGER",
-        "PAD_SELECT",
-        "PAD_START",
-        "PAD_MODE",
-        "PAD_LEFT_THUMB",
-        "PAD_RIGHT_THUMB",
-        "PAD_UP",
-        "PAD_DOWN",
-        "PAD_LEFT",
-        "PAD_RIGHT",
-        "PAD_UNKNOWN",
+        "KEY_SOUTH",
+        "KEY_EAST",
+        "KEY_NORTH",
+        "KEY_WEST",
+        "KEY_C",
+        "KEY_Z",
+        "KEY_LEFT_BUMPER",
+        "KEY_LEFT_TRIGGER",
+        "KEY_RIGHT_BUMPER",
+        "KEY_RIGHT_TRIGGER",
+        "KEY_SELECT",
+        "KEY_START",
+        "KEY_MODE",
+        "KEY_LEFT_THUMB",
+        "KEY_RIGHT_THUMB",
+        "KEY_UP",
+        "KEY_DOWN",
+        "KEY_LEFT",
+        "KEY_RIGHT",
+        "KEY_UNKNOWN",
     ];
 
     const LIST_AXIS: [&str; 9] = [
-        "PAD_AXIS_LEFT_STICK_X",
-        "PAD_AXIS_LEFT_STICK_Y",
-        "PAD_AXIS_LEFT_TRIGGER",
-        "PAD_AXIS_RIGHT_STICK_X",
-        "PAD_AXIS_RIGHT_STICK_Y",
-        "PAD_AXIS_RIGHT_TRIGGER",
-        "PAD_AXIS_X",
-        "PAD_AXIS_Y",
-        "PAD_AXIS_UNKNOWN",
+        "AXIS_LEFT_STICK_X",
+        "AXIS_LEFT_STICK_Y",
+        "AXIS_LEFT_TRIGGER",
+        "AXIS_RIGHT_STICK_X",
+        "AXIS_RIGHT_STICK_Y",
+        "AXIS_RIGHT_TRIGGER",
+        "AXIS_X",
+        "AXIS_Y",
+        "AXIS_UNKNOWN",
     ];
 
     fn module(module: &mut Module) -> anyhow::Result<()> {
@@ -521,11 +550,21 @@ impl Pad {
         module.function_meta(Self::name)?;
 
         for (i, key) in Self::LIST_KEY.iter().enumerate() {
-            module.constant(key, i).build()?;
+            module
+                .constant(*key, i)
+                .build_associated::<Self>()?
+                .docs(docstring! {
+                    /// Pad key.
+                })?;
         }
 
         for (i, key) in Self::LIST_AXIS.iter().enumerate() {
-            module.constant(key, i).build()?;
+            module
+                .constant(*key, i)
+                .build_associated::<Self>()?
+                .docs(docstring! {
+                    /// Pad axis.
+                })?;
         }
 
         Ok(())
@@ -545,30 +584,31 @@ impl Pad {
         }
     }
 
-    #[rune::function(path = Self::up)]
     /// Get the state of a pad input (up).
+    #[rune::function(path = Self::up)]
     fn up(state: &State, which: usize, index: usize) -> anyhow::Result<bool> {
         Ok(!Self::get_index(state, which, index)?.down)
     }
 
-    #[rune::function(path = Self::down)]
     /// Get the state of a pad input (down).
+    #[rune::function(path = Self::down)]
     fn down(state: &State, which: usize, index: usize) -> anyhow::Result<bool> {
         Ok(Self::get_index(state, which, index)?.down)
     }
 
-    #[rune::function(path = Self::press)]
     /// Get the state of a pad input (press).
+    #[rune::function(path = Self::press)]
     fn press(state: &State, which: usize, index: usize) -> anyhow::Result<bool> {
         Ok(Self::get_index(state, which, index)?.press)
     }
 
-    #[rune::function(path = Self::release)]
     /// Get the state of a pad input (release).
+    #[rune::function(path = Self::release)]
     fn release(state: &State, which: usize, index: usize) -> anyhow::Result<bool> {
         Ok(Self::get_index(state, which, index)?.release)
     }
 
+    /// Get the state of a pad axis. `index` must be in the range of [0, 8]. Refer to the Pad::AXIS_* constant family.
     #[rune::function(path = Self::axis)]
     fn axis(state: &State, which: usize, index: usize) -> anyhow::Result<f32> {
         if let Some((_, pad)) = state.input.pad.get_pad(which)
@@ -582,6 +622,7 @@ impl Pad {
         )))
     }
 
+    /// Get the human-readable name of a pad.
     #[rune::function(path = Self::name)]
     fn name(state: &State, which: usize) -> anyhow::Result<String> {
         if let Some((identifier, _)) = state.input.pad.get_pad(which) {

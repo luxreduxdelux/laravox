@@ -49,20 +49,11 @@
 */
 
 use crate::module::general::Vec2;
-use gilrs::{Event, Gamepad, GamepadId, Gilrs};
+use gilrs::{Event, GamepadId, Gilrs};
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher, event};
 use rodio::{OutputStream, OutputStreamHandle};
 use rune::{
-    Any,
-    Context,
-    Diagnostics,
-    FromValue,
-    Module,
-    Source,
-    Sources,
-    Value,
-    Vm,
-    //compile::ErrorKind,
+    Any, Context, Diagnostics, FromValue, Module, Options, Source, Sources, Value, Vm,
     runtime::{Function, GuardedArgs},
     termcolor::{Buffer, ColorChoice, StandardStream},
 };
@@ -70,7 +61,7 @@ use std::{
     collections::HashMap,
     sync::{Arc, mpsc::Receiver},
 };
-use three_d::{FrameInput, FrameInputGenerator};
+use three_d::FrameInput;
 use winit::{
     event_loop::ControlFlow,
     window::{CursorGrabMode, CursorIcon},
@@ -95,21 +86,8 @@ pub struct Script {
 
 impl Script {
     pub fn new() -> anyhow::Result<Self> {
-        // get the Rune context, with the Laravox/Rune standard library.
-        let mut context = rune_modules::default_context()?;
-
-        let mut module = Module::new();
-        module.ty::<Window>()?;
-
-        context.install(module)?;
-        context.install(crate::module::general::module()?)?;
-        context.install(crate::module::video::module()?)?;
-        context.install(crate::module::audio::module()?)?;
-        context.install(crate::module::input::module()?)?;
-        context.install(crate::module::file::module()?)?;
-        context.install(crate::module::physical::module()?)?;
-
-        //================================================================
+        // get the Rune context.
+        let context = Self::context()?;
 
         // get the Rune compilation unit, with the Rune source and context.
         let compile = Handle::new(&context);
@@ -127,6 +105,28 @@ impl Script {
             state: None,
             error,
         })
+    }
+
+    pub fn context() -> anyhow::Result<Context> {
+        // get the Rune context, with the Laravox/Rune standard library.
+        let mut context = Context::with_default_modules()?;
+
+        context.install(rune_modules::json::module(true)?)?;
+        context.install(rune_modules::toml::module(true)?)?;
+
+        let mut module = Module::new();
+        module.ty::<Window>()?;
+        module.ty::<State>()?;
+
+        context.install(module)?;
+        context.install(crate::module::general::module()?)?;
+        context.install(crate::module::video::module()?)?;
+        context.install(crate::module::audio::module()?)?;
+        context.install(crate::module::input::module()?)?;
+        context.install(crate::module::file::module()?)?;
+        context.install(crate::module::physical::module()?)?;
+
+        Ok(context)
     }
 
     pub fn window(&mut self) -> Window {
@@ -257,7 +257,7 @@ pub struct Handle {
 }
 
 impl Handle {
-    const MAIN_PATH: &str = "script/main.rn";
+    const MAIN_PATH: &str = "main/main.rn";
     const MAIN_NAME: &str = "Main";
     const CALL_WINDOW: &str = "window";
     const CALL_BEGIN: &str = "begin";
