@@ -62,6 +62,7 @@ use rune::{Any, Module, Ref};
 
 //================================================================
 
+/// A handle to a 2-D physical simulation.
 #[derive(Any)]
 #[rune(item = ::physical)]
 struct Physical2D {
@@ -93,6 +94,7 @@ impl Physical2D {
 
     //================================================================
 
+    /// Create a new 2-D physical simulation instance.
     #[rune::function(path = Self::new)]
     fn new() -> Self {
         let integration_parameters = IntegrationParameters::default();
@@ -125,6 +127,7 @@ impl Physical2D {
         }
     }
 
+    /// Advance the simulation by one frame.
     #[rune::function]
     fn tick(&mut self, gravity: &Vec2) -> Vec<Collision> {
         {
@@ -153,6 +156,7 @@ impl Physical2D {
         list.to_vec()
     }
 
+    /// Draw a debug visualization of the internal state.
     #[rune::function]
     fn draw_debug(&mut self, frame: &mut Frame) {
         self.debug_render.render(
@@ -277,17 +281,23 @@ impl EventHandler for CollisionHandler {
 
 //================================================================
 
+/// A handle to a collision event.
 #[derive(Any, Clone, Default)]
 #[rune(item = ::physical)]
 struct Collision {
+    /// Handle to solid body 'A' in the collision event.
     #[rune(get, copy)]
     handle_a: Solid,
+    /// Handle to solid body 'B' in the collision event.
     #[rune(get, copy)]
     handle_b: Solid,
+    /// Start flag; whether or not the collision event is an "enter" intersection or "exit" intersection.
     #[rune(get)]
     start: bool,
+    /// Sensor flag; either solid body 'A' and/or solid body 'B' are a sensor.
     #[rune(get)]
     sensor: bool,
+    /// Remove flag; solid body 'A' or solid body 'B' have been removed from the simulation. Trying to use 'A' or 'B' at all might do nothing.
     #[rune(get)]
     remove: bool,
 }
@@ -302,6 +312,7 @@ impl Collision {
 
 //================================================================
 
+/// Intersection testing.
 #[derive(Any)]
 #[rune(item = ::physical)]
 struct Intersect {}
@@ -319,6 +330,7 @@ impl Intersect {
         Ok(())
     }
 
+    /// Check if a 2-D box and another 2-D box are intersecting.
     #[rune::function(path = Self::box_2_box_2)]
     fn box_2_box_2(a: &Box2, b: &Box2) -> bool {
         a.point.x < b.scale.x
@@ -327,11 +339,13 @@ impl Intersect {
             && a.scale.y < b.point.y
     }
 
+    /// Check if a 2-D box and a circle are intersecting.
     #[rune::function(path = Self::box_2_circle)]
-    fn box_2_circle(a: &Vec2, b: &Box2) -> bool {
+    fn box_2_circle(a: &Box2, b: &Box2) -> bool {
         todo!()
     }
 
+    /// Check if a circle and another circle are intersecting.
     #[rune::function(path = Self::circle_circle)]
     fn circle_circle(a_point: &Vec2, a_radius: f32, b_point: &Vec2, b_radius: f32) -> bool {
         let distance = (a_point.x - b_point.x).powi(2) + (a_point.y - b_point.y).powi(2);
@@ -339,12 +353,14 @@ impl Intersect {
         distance >= (a_radius - b_radius).powi(2) && distance <= (a_radius + b_radius).powi(2)
     }
 
+    /// Check if a 2-D vector and a 2-D box are intersecting.
     #[rune::function(path = Self::vec_2_box_2)]
     fn vec_2_box_2(a: &Vec2, b: &Box2) -> bool {
         (a.x >= b.point.x && a.x <= b.point.x + b.scale.x)
             && (a.y >= b.point.y && a.y <= b.point.y + b.scale.y)
     }
 
+    /// Check if a 2-D vector and a circle are intersecting.
     #[rune::function(path = Self::vec_2_circle)]
     fn vec_2_circle(a: &Vec2, b_point: &Vec2, b_radius: f32) -> bool {
         (a.x - b_point.x).powi(2) + (a.y - b_point.y).powi(2) < b_radius.powi(2)
@@ -353,6 +369,7 @@ impl Intersect {
 
 //================================================================
 
+/// A handle to a solid body.
 #[derive(Any, Copy, Clone, Default)]
 #[rune(item = ::physical)]
 struct Solid {
@@ -388,6 +405,7 @@ impl Solid {
 
     //================================================================
 
+    /// Create a new solid body instance (cuboid).
     #[rune::function(path = Self::new_cuboid)]
     fn new_cuboid(physical: &mut Physical2D, half: &Vec2, parent: Option<Ref<Rigid>>) -> Self {
         let inner = ColliderBuilder::cuboid(half.x, half.y)
@@ -408,6 +426,7 @@ impl Solid {
         Self { inner }
     }
 
+    /// Create a new solid body instance (ball).
     #[rune::function(path = Self::new_ball)]
     fn new_ball(physical: &mut Physical2D, scale: f32, parent: Option<Ref<Rigid>>) -> Self {
         let inner = ColliderBuilder::ball(scale).build();
@@ -427,6 +446,7 @@ impl Solid {
 
     //================================================================
 
+    /// Get the point of a solid body.
     #[rune::function]
     fn get_point(&self, physical: &Physical2D) -> Vec2 {
         let inner = physical.collider_set.get(self.inner).unwrap();
@@ -435,6 +455,7 @@ impl Solid {
         Vec2::rust_new(value.x, value.y)
     }
 
+    /// Set the point of a solid body.
     #[rune::function]
     fn set_point(&self, physical: &mut Physical2D, point: &Vec2) {
         let inner = physical.collider_set.get_mut(self.inner).unwrap();
@@ -442,6 +463,7 @@ impl Solid {
         inner.set_translation(vector![point.x, point.y]);
     }
 
+    /// Get the angle of a solid body.
     #[rune::function]
     fn get_angle(&self, physical: &Physical2D) -> f32 {
         let inner = physical.collider_set.get(self.inner).unwrap();
@@ -450,6 +472,7 @@ impl Solid {
         value.re
     }
 
+    /// Set the angle of a solid body.
     #[rune::function]
     fn set_angle(&self, physical: &mut Physical2D, angle: f32) {
         let inner = physical.collider_set.get_mut(self.inner).unwrap();
@@ -457,6 +480,7 @@ impl Solid {
         inner.set_rotation(Rotation::new(angle));
     }
 
+    /// Get the rigid body parent of a solid body.
     #[rune::function]
     fn get_parent(&self, physical: &Physical2D) -> Option<Rigid> {
         if let Some(inner) = physical.collider_set.get(self.inner) {
@@ -470,6 +494,7 @@ impl Solid {
         None
     }
 
+    /// Check if a solid body is a sensor.
     #[rune::function]
     fn get_sensor(&self, physical: &Physical2D) -> bool {
         let inner = physical.collider_set.get(self.inner).unwrap();
@@ -477,6 +502,7 @@ impl Solid {
         inner.is_sensor()
     }
 
+    /// Set a solid body as a sensor.
     #[rune::function]
     fn set_sensor(&self, physical: &mut Physical2D, sensor: bool) {
         let inner = physical.collider_set.get_mut(self.inner).unwrap();
@@ -484,6 +510,7 @@ impl Solid {
         inner.set_sensor(sensor);
     }
 
+    /// Get the mass of a solid body.
     #[rune::function]
     fn get_mass(&self, physical: &Physical2D) -> f32 {
         let inner = physical.collider_set.get(self.inner).unwrap();
@@ -491,6 +518,7 @@ impl Solid {
         inner.mass()
     }
 
+    /// Set the mass of a solid body.
     #[rune::function]
     fn set_mass(&self, physical: &mut Physical2D, mass: f32) {
         let inner = physical.collider_set.get_mut(self.inner).unwrap();
@@ -498,6 +526,7 @@ impl Solid {
         inner.set_mass(mass);
     }
 
+    /// Get the user data of a solid body.
     #[rune::function]
     fn get_user_data(&self, physical: &Physical2D) -> u128 {
         let inner = physical.collider_set.get(self.inner).unwrap();
@@ -505,6 +534,7 @@ impl Solid {
         inner.user_data
     }
 
+    /// Set the user data of a solid body.
     #[rune::function]
     fn set_user_data(&self, physical: &mut Physical2D, user_data: u128) {
         let inner = physical.collider_set.get_mut(self.inner).unwrap();
@@ -512,6 +542,10 @@ impl Solid {
         inner.user_data = user_data;
     }
 
+    /// Remove a solid body.
+    ///
+    /// # Warning!
+    /// Using this solid body after this call will throw an error.
     #[rune::function]
     fn remove(self, physical: &mut Physical2D, wake_parent: bool) {
         physical.collider_set.remove(
@@ -525,6 +559,7 @@ impl Solid {
 
 //================================================================
 
+/// A handle to a rigid body.
 #[derive(Any, Copy, Clone)]
 #[rune(item = ::physical)]
 struct Rigid {
@@ -552,6 +587,7 @@ impl Rigid {
 
     //================================================================
 
+    /// Create a new rigid body instance (dynamic).
     #[rune::function(path = Self::new_dynamic)]
     fn new_dynamic(physical: &mut Physical2D) -> Self {
         let inner = RigidBodyBuilder::dynamic().build();
@@ -560,6 +596,7 @@ impl Rigid {
         Self { inner }
     }
 
+    /// Create a new rigid body instance (static).
     #[rune::function(path = Self::new_static)]
     fn new_static(physical: &mut Physical2D) -> Self {
         let inner = RigidBodyBuilder::fixed().build();
@@ -568,6 +605,11 @@ impl Rigid {
         Self { inner }
     }
 
+    /// Create a new rigid body instance (kinematic).
+    ///
+    /// If `position_kinematic` is set to `true`, the simulation will never automatically modify its position, with the velocity being automatically set
+    /// in correspondance with the set position by the user. The opposite is true if the `position_kinematic` is set to `false`.
+    /// For more info, click [here.](https://rapier.rs/docs/user_guides/rust/rigid_bodies#rigid-body-type)
     #[rune::function(path = Self::new_kinematic)]
     fn new_kinematic(physical: &mut Physical2D, position_kinematic: bool) -> Self {
         let inner = {
@@ -585,6 +627,7 @@ impl Rigid {
 
     //================================================================
 
+    /// Get the point of a rigid body.
     #[rune::function]
     fn get_point(&self, physical: &Physical2D) -> Vec2 {
         let inner = physical.rigid_body_set.get(self.inner).unwrap();
@@ -593,6 +636,7 @@ impl Rigid {
         Vec2::rust_new(value.x, value.y)
     }
 
+    /// Set the point of a rigid body.
     #[rune::function]
     fn set_point(&self, physical: &mut Physical2D, point: &Vec2, wake: bool) {
         let inner = physical.rigid_body_set.get_mut(self.inner).unwrap();
@@ -600,6 +644,7 @@ impl Rigid {
         inner.set_translation(vector![point.x, point.y], wake);
     }
 
+    /// Get the angle of a rigid body.
     #[rune::function]
     fn get_angle(&self, physical: &Physical2D) -> f32 {
         let inner = physical.rigid_body_set.get(self.inner).unwrap();
@@ -608,6 +653,7 @@ impl Rigid {
         value.re
     }
 
+    /// Set the angle of a rigid body.
     #[rune::function]
     fn set_angle(&self, physical: &mut Physical2D, angle: f32, wake: bool) {
         let inner = physical.rigid_body_set.get_mut(self.inner).unwrap();
@@ -615,6 +661,7 @@ impl Rigid {
         inner.set_rotation(Rotation::new(angle), wake);
     }
 
+    /// Get the user data of a rigid body.
     #[rune::function]
     fn get_user_data(&self, physical: &Physical2D) -> u128 {
         let inner = physical.rigid_body_set.get(self.inner).unwrap();
@@ -622,6 +669,7 @@ impl Rigid {
         inner.user_data
     }
 
+    /// Set the user data of a rigid body.
     #[rune::function]
     fn set_user_data(&self, physical: &mut Physical2D, user_data: u128) {
         let inner = physical.rigid_body_set.get_mut(self.inner).unwrap();
@@ -629,6 +677,10 @@ impl Rigid {
         inner.user_data = user_data;
     }
 
+    /// Remove a rigid body.
+    ///
+    /// # Warning!
+    /// Using this solid body after this call will throw an error.
     #[rune::function]
     fn remove(self, physical: &mut Physical2D, remove_collider: bool) {
         physical.rigid_body_set.remove(
@@ -644,6 +696,7 @@ impl Rigid {
 
 //================================================================
 
+/// A handle to a character controller.
 #[derive(Any, Copy, Clone)]
 #[rune(item = ::physical)]
 struct Controller {
@@ -664,6 +717,7 @@ impl Controller {
 
     //================================================================
 
+    /// Create a new character controller instance.
     #[rune::function(path = Self::new)]
     fn new() -> Self {
         Self {
@@ -671,11 +725,13 @@ impl Controller {
         }
     }
 
+    /// Set the "up" vector.
     #[rune::function]
     fn set_up(&mut self, direction: &Vec2) {
         self.inner.up = UnitVector::new_normalize(vector![direction.x, direction.y]);
     }
 
+    /// Move the character controller.
     #[rune::function]
     fn movement(
         &self,

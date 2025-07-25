@@ -57,13 +57,14 @@ use std::sync::Arc;
 //================================================================
 
 use rune::{
-    Any, Module, Value,
+    Any, Module,
     alloc::HashMap,
     runtime::{Function, VmResult},
 };
 
 //================================================================
 
+/// Frame renderer.
 #[derive(Any)]
 #[rune(item = ::video)]
 pub struct Frame {
@@ -115,6 +116,7 @@ impl Frame {
 
     //================================================================
 
+    /// Create a new frame instance.
     #[rune::function(path = Self::new)]
     #[rustfmt::skip]
     fn new(state: &State) -> Self {
@@ -170,6 +172,7 @@ impl Frame {
         self.program_active = Some(shader.data.clone());
     }
 
+    /// Begin a new frame, with the result being sent to the screen.
     #[rune::function]
     fn draw(&mut self, state: &State, camera: &Camera, render_call: Function) -> VmResult<()> {
         use three_d::*;
@@ -203,6 +206,7 @@ impl Frame {
         result
     }
 
+    /// Begin a new frame, with the result being sent to a render image.
     #[rune::function]
     fn draw_to(
         &mut self,
@@ -274,6 +278,7 @@ impl Frame {
         value
     }
 
+    /// Draw a 2-D box.
     #[rune::function]
     fn draw_box(&mut self, box_a: &Box2, color: &Color) {
         let data = self.basic.1.clone();
@@ -287,6 +292,7 @@ impl Frame {
         );
     }
 
+    /// Draw a 2-D line.
     #[rune::function]
     fn draw_line(&mut self, point_a: &Vec2, point_b: &Vec2, thick: f32, color: &Color) {
         let data = self.basic.1.clone();
@@ -519,6 +525,7 @@ impl Frame {
 
 //================================================================
 
+/// A handle to a shader.
 #[derive(Any)]
 #[rune(item = ::video)]
 struct Shader {
@@ -547,6 +554,7 @@ impl Shader {
 
     //================================================================
 
+    /// Create a new shader instance.
     #[rune::function(path = Self::new)]
     fn new(
         state: &State,
@@ -578,69 +586,81 @@ impl Shader {
         })
     }
 
+    /// Set an uniform in the shader (u8).
     #[rune::function]
-    fn set_uniform_u8(&self, name: String, data: u8) {
-        self.data.use_uniform_if_required(&name, data);
+    fn set_uniform_u8(&self, name: &str, data: u8) {
+        self.data.use_uniform_if_required(name, data);
     }
 
+    /// Set an uniform in the shader (u16).
     #[rune::function]
-    fn set_uniform_u16(&self, name: String, data: u16) {
-        self.data.use_uniform_if_required(&name, data);
+    fn set_uniform_u16(&self, name: &str, data: u16) {
+        self.data.use_uniform_if_required(name, data);
     }
 
+    /// Set an uniform in the shader (u32).
     #[rune::function]
-    fn set_uniform_u32(&self, name: String, data: u32) {
-        self.data.use_uniform_if_required(&name, data);
+    fn set_uniform_u32(&self, name: &str, data: u32) {
+        self.data.use_uniform_if_required(name, data);
     }
 
+    /// Set an uniform in the shader (i8).
     #[rune::function]
-    fn set_uniform_i8(&self, name: String, data: i8) {
-        self.data.use_uniform_if_required(&name, data);
+    fn set_uniform_i8(&self, name: &str, data: i8) {
+        self.data.use_uniform_if_required(name, data);
     }
 
+    /// Set an uniform in the shader (i16).
     #[rune::function]
-    fn set_uniform_i16(&self, name: String, data: i16) {
-        self.data.use_uniform_if_required(&name, data);
+    fn set_uniform_i16(&self, name: &str, data: i16) {
+        self.data.use_uniform_if_required(name, data);
     }
 
+    /// Set an uniform in the shader (i32).
     #[rune::function]
-    fn set_uniform_i32(&self, name: String, data: i32) {
-        self.data.use_uniform_if_required(&name, data);
+    fn set_uniform_i32(&self, name: &str, data: i32) {
+        self.data.use_uniform_if_required(name, data);
     }
 
+    /// Set an uniform in the shader (f32).
     #[rune::function]
-    fn set_uniform_f32(&self, name: String, data: f32) {
-        self.data.use_uniform_if_required(&name, data);
+    fn set_uniform_f32(&self, name: &str, data: f32) {
+        self.data.use_uniform_if_required(name, data);
     }
 
+    /// Set an uniform in the shader (Vec2).
     #[rune::function]
-    fn set_uniform_vec_2(&self, name: String, data: &Vec2) {
+    fn set_uniform_vec_2(&self, name: &str, data: &Vec2) {
         self.data
-            .use_uniform_if_required(&name, three_d::vec2(data.x, data.y));
+            .use_uniform_if_required(name, three_d::vec2(data.x, data.y));
     }
 
+    /// Set an uniform in the shader (Vec3).
     #[rune::function]
-    fn set_uniform_vec_3(&self, name: String, data: &Vec3) {
+    fn set_uniform_vec_3(&self, name: &str, data: &Vec3) {
         self.data
-            .use_uniform_if_required(&name, three_d::vec3(data.x, data.y, data.z));
+            .use_uniform_if_required(name, three_d::vec3(data.x, data.y, data.z));
     }
 
+    /// Set an uniform in the shader (Vec4).
     #[rune::function]
-    fn set_uniform_vec_4(&self, name: String, data: &Vec4) {
+    fn set_uniform_vec_4(&self, name: &str, data: &Vec4) {
         self.data
-            .use_uniform_if_required(&name, three_d::vec4(data.x, data.y, data.z, data.w));
+            .use_uniform_if_required(name, three_d::vec4(data.x, data.y, data.z, data.w));
     }
 
+    /// Set an uniform in the shader (Image).
     #[rune::function]
-    fn set_uniform_image(&self, name: String, data: &Image) {
-        if self.data.requires_uniform(&name) {
-            self.data.use_texture(&name, &data.data);
+    fn set_uniform_image(&self, name: &str, data: &Image) {
+        if self.data.requires_uniform(name) {
+            self.data.use_texture(name, &data.data);
         }
     }
 }
 
 //================================================================
 
+/// A handle to a camera.
 #[derive(Any, Clone)]
 #[allow(dead_code)]
 #[rune(item = ::video)]
@@ -659,6 +679,7 @@ impl Camera {
 
     //================================================================
 
+    /// Create a new camera instance.
     #[rune::function(path = Self::new)]
     fn new(state: &State, point: &Vec2, focus: &Vec2, angle: f32, zoom: f32) -> Self {
         let mut point = *point;
@@ -699,6 +720,7 @@ impl Camera {
 
 //================================================================
 
+/// A handle to a render image.
 #[derive(Any)]
 #[rune(item = ::video)]
 struct Render {
@@ -723,6 +745,7 @@ impl Render {
 
     //================================================================
 
+    /// Create a new render image instance.
     #[rune::function(path = Self::new)]
     fn new(state: &State, scale: Vec2) -> anyhow::Result<Self> {
         use three_d::*;
@@ -756,6 +779,7 @@ impl Render {
         })
     }
 
+    /// Draw the render image, specifying its point on screen.
     #[rune::function]
     fn draw(&mut self, frame: &mut Frame, point: &Vec2) {
         frame.draw_image(
@@ -775,6 +799,7 @@ impl Render {
         );
     }
 
+    /// Draw the render image, specifying its point and scale on screen.
     #[rune::function]
     fn draw_box(&mut self, frame: &mut Frame, box_a: &Box2) {
         frame.draw_image(
@@ -790,6 +815,7 @@ impl Render {
         );
     }
 
+    /// Draw the render image, specifying its point, scale and color on screen.
     #[rune::function]
     fn draw_box_color(&mut self, frame: &mut Frame, box_a: &Box2, color: &Color) {
         frame.draw_image(
@@ -805,6 +831,7 @@ impl Render {
         );
     }
 
+    /// Draw the render image, specifying its point, scale, image point/scale and color on screen.
     #[rune::function]
     fn draw_box_color_clip(
         &mut self,
@@ -816,6 +843,7 @@ impl Render {
         frame.draw_image(&self.hash, &self.data, box_a, box_b, color);
     }
 
+    /// Get the scale of the render image.
     #[rune::function]
     fn scale(&self) -> Vec2 {
         Vec2 {
@@ -827,6 +855,7 @@ impl Render {
 
 //================================================================
 
+/// A handle to an image.
 #[derive(Any)]
 #[rune(item = ::video)]
 struct Image {
@@ -851,6 +880,7 @@ impl Image {
 
     //================================================================
 
+    /// Create a new image instance.
     #[rune::function(path = Self::new)]
     fn new(state: &State, path: &str) -> anyhow::Result<Self> {
         use three_d::*;
@@ -869,6 +899,7 @@ impl Image {
         })
     }
 
+    /// Draw the image, specifying its point on screen.
     #[rune::function]
     fn draw(&mut self, frame: &mut Frame, point: &Vec2) {
         frame.draw_image(
@@ -888,6 +919,7 @@ impl Image {
         );
     }
 
+    /// Draw the image, specifying its point and scale on screen.
     #[rune::function]
     fn draw_box(&mut self, frame: &mut Frame, box_a: &Box2) {
         frame.draw_image(
@@ -903,6 +935,7 @@ impl Image {
         );
     }
 
+    /// Draw the image, specifying its point, scale and color on screen.
     #[rune::function]
     fn draw_box_color(&mut self, frame: &mut Frame, box_a: &Box2, color: &Color) {
         frame.draw_image(
@@ -918,6 +951,7 @@ impl Image {
         );
     }
 
+    /// Draw the image, specifying its point, scale, image point/scale and color on screen.
     #[rune::function]
     fn draw_box_color_clip(
         &mut self,
@@ -929,6 +963,7 @@ impl Image {
         frame.draw_image(&self.hash, &self.data, box_a, box_b, color);
     }
 
+    /// Get the scale of the image.
     #[rune::function]
     fn scale(&self) -> Vec2 {
         Vec2 {
@@ -958,6 +993,7 @@ impl Glyph {
     }
 }
 
+/// A handle to a font.
 #[derive(Any)]
 #[rune(item = ::video)]
 struct Font {
@@ -983,6 +1019,7 @@ impl Font {
 
     //================================================================
 
+    /// Create a new font instance. `path` may be `None` to use a default font.
     #[rune::function(path = Self::new)]
     fn new(state: &State, path: Option<String>, scale: f32, filter: bool) -> anyhow::Result<Self> {
         let code: String = (32..127).map(|x| x as u8 as char).collect();
@@ -1077,8 +1114,9 @@ impl Font {
         })
     }
 
+    /// Draw the font.
     #[rune::function]
-    fn draw(&self, frame: &mut Frame, point: &Vec2, text: String, scale: f32) {
+    fn draw(&self, frame: &mut Frame, point: &Vec2, text: &str, scale: f32) {
         let mut push = Vec2::rust_new(0.0, 0.0);
         let scale_normal = scale / self.scale;
 
@@ -1086,51 +1124,50 @@ impl Font {
             if character == '\n' {
                 push.x = 0.0;
                 push.y += scale;
-            } else {
-                if let Some(glyph) = self.map.get(&character) {
-                    frame.draw_image(
-                        &self.hash,
-                        &self.data,
-                        &Box2 {
-                            point: Vec2 {
-                                x: point.x + push.x,
-                                y: point.y + push.y + glyph.point.1 * scale_normal,
-                            },
-                            scale: Vec2 {
-                                x: glyph.scale.0 * scale_normal,
-                                y: glyph.scale.1 * scale_normal,
-                            },
-                            angle: 0.0,
+            } else if let Some(glyph) = self.map.get(&character) {
+                frame.draw_image(
+                    &self.hash,
+                    &self.data,
+                    &Box2 {
+                        point: Vec2 {
+                            x: point.x + push.x,
+                            y: point.y + push.y + glyph.point.1 * scale_normal,
                         },
-                        &Box2 {
-                            point: Vec2 {
-                                x: glyph.shift,
-                                y: 0.0,
-                            },
-                            scale: Vec2 {
-                                x: glyph.scale.0,
-                                y: glyph.scale.1,
-                            },
-                            angle: 0.0,
+                        scale: Vec2 {
+                            x: glyph.scale.0 * scale_normal,
+                            y: glyph.scale.1 * scale_normal,
                         },
-                        &Color {
-                            r: 255,
-                            g: 255,
-                            b: 255,
-                            a: 255,
+                        angle: 0.0,
+                    },
+                    &Box2 {
+                        point: Vec2 {
+                            x: glyph.shift,
+                            y: 0.0,
                         },
-                    );
+                        scale: Vec2 {
+                            x: glyph.scale.0,
+                            y: glyph.scale.1,
+                        },
+                        angle: 0.0,
+                    },
+                    &Color {
+                        r: 255,
+                        g: 255,
+                        b: 255,
+                        a: 255,
+                    },
+                );
 
-                    push.x += glyph.push.0 * scale_normal;
-                } else {
-                    push.x += scale;
-                }
+                push.x += glyph.push.0 * scale_normal;
+            } else {
+                push.x += scale;
             }
         }
     }
 
+    /// Measure the scale of a text string.
     #[rune::function]
-    fn measure(&self, text: String, scale: f32) -> Vec2 {
+    fn measure(&self, text: &str, scale: f32) -> Vec2 {
         let mut size = Vec2::rust_new(0.0, scale);
         let mut push = 0.0;
         let scale_normal = scale / self.scale;
@@ -1139,12 +1176,10 @@ impl Font {
             if character == '\n' {
                 push = 0.0;
                 size.y += scale;
+            } else if let Some(glyph) = self.map.get(&character) {
+                push += glyph.push.0 * scale_normal;
             } else {
-                if let Some(glyph) = self.map.get(&character) {
-                    push += glyph.push.0 * scale_normal;
-                } else {
-                    push += scale;
-                }
+                push += scale;
             }
 
             if size.x <= push {
@@ -1158,6 +1193,7 @@ impl Font {
 
 //================================================================
 
+/// Accessor for getting and setting data about the current window.
 #[derive(Any)]
 #[rune(item = ::video)]
 struct Window {}
@@ -1191,16 +1227,19 @@ impl Window {
 
     //================================================================
 
+    /// Get the current frame time/delta (time spent on the last frame).
     #[rune::function(path = Self::get_time_frame)]
     fn get_time_frame(state: &State) -> f64 {
         state.frame.elapsed_time
     }
 
+    /// Get the current time since window initialization.
     #[rune::function(path = Self::get_time_since)]
     fn get_time_since(state: &State) -> f64 {
         state.frame.accumulated_time
     }
 
+    /// Get the current window scale.
     #[rune::function(path = Self::get_scale)]
     fn get_scale(state: &State) -> Vec2 {
         Vec2::rust_new(
@@ -1209,56 +1248,68 @@ impl Window {
         )
     }
 
+    /// Get the current window full-screen state.
     #[rune::function(path = Self::get_full)]
     fn get_full(state: &State) -> bool {
         state.input.window_get.full
     }
 
+    /// Minimize the window.
     #[rune::function(path = Self::set_minimize)]
     fn set_minimize(state: &mut State) {
         state.input.window_set.minimize = Some(());
     }
 
+    /// Maximize the window.
     #[rune::function(path = Self::set_maximize)]
     fn set_maximize(state: &mut State) {
         state.input.window_set.maximize = Some(());
     }
 
+    /// Focus the window.
     #[rune::function(path = Self::set_focus)]
     fn set_focus(state: &mut State) {
         state.input.window_set.focus = Some(());
     }
 
+    /// Set the point of the window.
     #[rune::function(path = Self::set_point)]
     fn set_point(state: &mut State, point: &Vec2) {
         state.input.window_set.point = Some(*point);
     }
 
+    /// Set the name of the window.
     #[rune::function(path = Self::set_name)]
     fn set_name(state: &mut State, name: &str) {
         state.input.window_set.name = Some(name.to_string());
     }
 
+    /// Set the icon of the window.
     #[rune::function(path = Self::set_icon)]
     fn set_icon(state: &mut State, icon: &str) {
+        // TO-DO does this actually work?
         state.input.window_set.icon = Some(icon.to_string());
     }
 
+    /// Set the full-screen mode of the window.
     #[rune::function(path = Self::set_full)]
     fn set_full(state: &mut State, window: bool) {
         state.input.window_set.full = Some(window);
     }
 
+    /// Set the minimum scale of the window.
     #[rune::function(path = Self::set_scale_min)]
     fn set_scale_min(state: &mut State, scale_min: &Vec2) {
         state.input.window_set.scale_min = Some(*scale_min);
     }
 
+    /// Set the maximum scale of the window.
     #[rune::function(path = Self::set_scale_max)]
     fn set_scale_max(state: &mut State, scale_max: &Vec2) {
         state.input.window_set.scale_max = Some(*scale_max);
     }
 
+    /// Set the scale of the window.
     #[rune::function(path = Self::set_scale)]
     fn set_scale(state: &mut State, scale: &Vec2) {
         state.input.window_set.scale = Some(*scale);

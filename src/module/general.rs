@@ -58,11 +58,14 @@ use three_d::Srgba;
 
 //================================================================
 
+/// A 2-D vector.
 #[derive(Any, TryClone, Copy, Clone, Debug)]
 #[rune(item = ::general)]
 pub struct Vec2 {
+    /// 'X' component.
     #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
     pub x: f32,
+    /// 'Y' component.
     #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
     pub y: f32,
 }
@@ -96,36 +99,43 @@ impl Vec2 {
 
     //================================================================
 
+    /// Create a new 2-D vector.
     #[rune::function(path = Self::new)]
     fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
 
+    /// Create a new 2-D vector, using a scalar value for both X and Y.
     #[rune::function(path = Self::scalar)]
     fn scalar(value: f32) -> Self {
         Self { x: value, y: value }
     }
 
+    /// Create a new 2-D vector, using a scalar value for X.
     #[rune::function(path = Self::x)]
     fn x(x: f32) -> Self {
         Self { x, y: 0.0 }
     }
 
+    /// Create a new 2-D vector, using a scalar value for Y.
     #[rune::function(path = Self::y)]
     fn y(y: f32) -> Self {
         Self { x: 0.0, y }
     }
 
+    /// Create a new 2-D vector, with every component set to zero.
     #[rune::function(path = Self::zero)]
     fn zero() -> Self {
         Self { x: 0.0, y: 0.0 }
     }
 
+    /// Create a new 2-D vector, with every component set to one.
     #[rune::function(path = Self::one)]
     fn one() -> Self {
         Self { x: 1.0, y: 1.0 }
     }
 
+    /// Calculate the dot product with another vector.
     #[rune::function]
     fn dot(&mut self, other: &Self) -> f32 {
         (self.x * other.x) + (self.y * other.y)
@@ -186,13 +196,17 @@ impl Vec2 {
 
 //================================================================
 
+/// A 3-D vector.
 #[derive(Any, TryClone, Copy, Clone, Debug)]
 #[rune(item = ::general)]
 pub struct Vec3 {
+    /// 'X' component.
     #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
     pub x: f32,
+    /// 'Y' component.
     #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
     pub y: f32,
+    /// 'Z' component.
     #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
     pub z: f32,
 }
@@ -229,11 +243,13 @@ impl Vec3 {
 
     //================================================================
 
+    /// Create a new 3-D vector.
     #[rune::function(path = Self::new)]
     fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
     }
 
+    /// Create a new 3-D vector, using a scalar value for X, Y and Z.
     #[rune::function(path = Self::scalar)]
     fn scalar(value: f32) -> Self {
         Self {
@@ -243,21 +259,25 @@ impl Vec3 {
         }
     }
 
+    /// Create a new 3-D vector, using a scalar value for X.
     #[rune::function(path = Self::x)]
     fn x(x: f32) -> Self {
         Self { x, y: 0.0, z: 0.0 }
     }
 
+    /// Create a new 3-D vector, using a scalar value for Y.
     #[rune::function(path = Self::y)]
     fn y(y: f32) -> Self {
         Self { x: 0.0, y, z: 0.0 }
     }
 
+    /// Create a new 3-D vector, using a scalar value for Z.
     #[rune::function(path = Self::z)]
     fn z(z: f32) -> Self {
         Self { x: 0.0, y: 0.0, z }
     }
 
+    /// Create a new 3-D vector, with every component set to zero.
     #[rune::function(path = Self::zero)]
     fn zero() -> Self {
         Self {
@@ -267,6 +287,7 @@ impl Vec3 {
         }
     }
 
+    /// Create a new 3-D vector, with every component set to one.
     #[rune::function(path = Self::one)]
     fn one() -> Self {
         Self {
@@ -276,6 +297,7 @@ impl Vec3 {
         }
     }
 
+    /// Calculate the dot product with another vector.
     #[rune::function]
     fn dot(&mut self, other: &Self) -> f32 {
         (self.x * other.x) + (self.y * other.y) + (self.z * other.z)
@@ -342,15 +364,20 @@ impl Vec3 {
 
 //================================================================
 
+/// A 4-D vector.
 #[derive(Any, TryClone, Copy, Clone, Debug)]
 #[rune(item = ::general)]
 pub struct Vec4 {
+    /// 'X' component.
     #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
     pub x: f32,
+    /// 'Y' component.
     #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
     pub y: f32,
+    /// 'Z' component.
     #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
     pub z: f32,
+    /// 'W' component.
     #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
     pub w: f32,
 }
@@ -386,11 +413,13 @@ impl Vec4 {
 
     //================================================================
 
+    /// Create a new 4-D vector.
     #[rune::function(path = Self::new)]
     fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
         Self { x, y, z, w }
     }
 
+    /// Create a new 4-D vector, using a scalar value for X, Y, Z and W.
     #[rune::function(path = Self::scalar)]
     fn scalar(value: f32) -> Self {
         Self {
@@ -401,6 +430,7 @@ impl Vec4 {
         }
     }
 
+    /// Create a new 4-D vector, using a scalar value for X.
     #[rune::function(path = Self::x)]
     fn x(x: f32) -> Self {
         Self {
@@ -411,6 +441,7 @@ impl Vec4 {
         }
     }
 
+    /// Create a new 4-D vector, using a scalar value for Y.
     #[rune::function(path = Self::y)]
     fn y(y: f32) -> Self {
         Self {
@@ -421,6 +452,7 @@ impl Vec4 {
         }
     }
 
+    /// Create a new 4-D vector, using a scalar value for Z.
     #[rune::function(path = Self::z)]
     fn z(z: f32) -> Self {
         Self {
@@ -431,6 +463,7 @@ impl Vec4 {
         }
     }
 
+    /// Create a new 4-D vector, using a scalar value for W.
     #[rune::function(path = Self::w)]
     fn w(w: f32) -> Self {
         Self {
@@ -441,6 +474,7 @@ impl Vec4 {
         }
     }
 
+    /// Create a new 4-D vector, with every component set to zero.
     #[rune::function(path = Self::zero)]
     fn zero() -> Self {
         Self {
@@ -451,6 +485,7 @@ impl Vec4 {
         }
     }
 
+    /// Create a new 4-D vector, with every component set to one.
     #[rune::function(path = Self::one)]
     fn one() -> Self {
         Self {
@@ -461,6 +496,7 @@ impl Vec4 {
         }
     }
 
+    /// Calculate the dot product with another vector.
     #[rune::function]
     fn dot(&mut self, other: &Self) -> f32 {
         (self.x * other.x) + (self.y * other.y) + (self.z * other.z) + (self.w * other.w)
@@ -533,13 +569,17 @@ impl Vec4 {
 
 //================================================================
 
+/// A 2-D box, with point, scale, and angle.
 #[derive(Any, TryClone, Copy, Clone, Debug)]
 #[rune(item = ::general)]
 pub struct Box2 {
+    /// Point of the box.
     #[rune(get, set, copy)]
     pub point: Vec2,
+    /// Scale of the box.
     #[rune(get, set, copy)]
     pub scale: Vec2,
+    /// Angle of the box.
     #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
     pub angle: f32,
 }
@@ -565,6 +605,7 @@ impl Box2 {
 
     //================================================================
 
+    /// Create a new 2-D box.
     #[rune::function(path = Self::new)]
     fn new(point: &Vec2, scale: &Vec2, angle: f32) -> Self {
         Self {
@@ -587,15 +628,20 @@ impl Box2 {
 
 //================================================================
 
+/// A color.
 #[derive(Any, TryClone, Copy, Clone, Debug)]
 #[rune(item = ::general)]
 pub struct Color {
+    /// 'R' channel.
     #[rune(get, set)]
     pub r: u8,
+    /// 'G' channel.
     #[rune(get, set)]
     pub g: u8,
+    /// 'B' channel.
     #[rune(get, set)]
     pub b: u8,
+    /// 'A' channel.
     #[rune(get, set)]
     pub a: u8,
 }
@@ -605,10 +651,13 @@ impl Color {
         module.ty::<Self>()?;
 
         module.function_meta(Self::new)?;
-        module.function_meta(Self::format)?;
-        module.function_meta(Self::format_debug)?;
+        module.function_meta(Self::r)?;
+        module.function_meta(Self::g)?;
+        module.function_meta(Self::b)?;
         module.function_meta(Self::white)?;
         module.function_meta(Self::black)?;
+        module.function_meta(Self::format)?;
+        module.function_meta(Self::format_debug)?;
 
         Ok(())
     }
@@ -619,11 +668,46 @@ impl Color {
 
     //================================================================
 
+    // Create a new color.
     #[rune::function(path = Self::new)]
     fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self { r, g, b, a }
     }
 
+    // Create a new color, using the constant color red.
+    #[rune::function(path = Self::r)]
+    fn r() -> Self {
+        Self {
+            r: 255,
+            g: 0,
+            b: 0,
+            a: 255,
+        }
+    }
+
+    // Create a new color, using the constant color green.
+    #[rune::function(path = Self::g)]
+    fn g() -> Self {
+        Self {
+            r: 0,
+            g: 255,
+            b: 0,
+            a: 255,
+        }
+    }
+
+    // Create a new color, using the constant color blue.
+    #[rune::function(path = Self::b)]
+    fn b() -> Self {
+        Self {
+            r: 0,
+            g: 0,
+            b: 255,
+            a: 255,
+        }
+    }
+
+    // Create a new color, using the constant color white.
     #[rune::function(path = Self::white)]
     fn white() -> Self {
         Self {
@@ -634,6 +718,7 @@ impl Color {
         }
     }
 
+    // Create a new color, using the constant color black.
     #[rune::function(path = Self::black)]
     fn black() -> Self {
         Self {

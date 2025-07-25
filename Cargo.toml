@@ -12,7 +12,7 @@ strip = "none"
 
 [dependencies]
 # rune.
-rune          = { version = "0.14.0", features = ["fmt"] }
+rune          = { version = "0.14.0", features = ["cli", "fmt"] }
 rune-modules  = { version = "0.14.0", features = ["full"] }
 # generic error converter.
 anyhow        = { version = "1.0.98" }
@@ -33,3 +33,4 @@ rfd           = { version = "0.15.3" }
 rapier2d      = { version = "0.26.1", features = ["simd-stable", "debug-render"] }
 # file-system notification.
 notify        = { version = "8.1.0" }
+tokio         = { version = "1.46.1", features = ["full"] }
