@@ -188,6 +188,353 @@ impl Vec2 {
 
 #[derive(Any, TryClone, Copy, Clone, Debug)]
 #[rune(item = ::general)]
+pub struct Vec3 {
+    #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
+    pub x: f32,
+    #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
+    pub y: f32,
+    #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
+    pub z: f32,
+}
+
+impl Vec3 {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        // TO-DO add cross product operation.
+
+        module.function_meta(Self::new)?;
+        module.function_meta(Self::scalar)?;
+        module.function_meta(Self::x)?;
+        module.function_meta(Self::y)?;
+        module.function_meta(Self::z)?;
+        module.function_meta(Self::zero)?;
+        module.function_meta(Self::one)?;
+        module.function_meta(Self::dot)?;
+        module.function_meta(Self::format)?;
+        module.function_meta(Self::format_debug)?;
+        module.function_meta(Self::add)?;
+        module.function_meta(Self::add_assign)?;
+        module.function_meta(Self::sub)?;
+        module.function_meta(Self::sub_assign)?;
+        module.function_meta(Self::mul)?;
+        module.function_meta(Self::mul_assign)?;
+
+        Ok(())
+    }
+
+    pub fn rust_new(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z }
+    }
+
+    //================================================================
+
+    #[rune::function(path = Self::new)]
+    fn new(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z }
+    }
+
+    #[rune::function(path = Self::scalar)]
+    fn scalar(value: f32) -> Self {
+        Self {
+            x: value,
+            y: value,
+            z: value,
+        }
+    }
+
+    #[rune::function(path = Self::x)]
+    fn x(x: f32) -> Self {
+        Self { x, y: 0.0, z: 0.0 }
+    }
+
+    #[rune::function(path = Self::y)]
+    fn y(y: f32) -> Self {
+        Self { x: 0.0, y, z: 0.0 }
+    }
+
+    #[rune::function(path = Self::z)]
+    fn z(z: f32) -> Self {
+        Self { x: 0.0, y: 0.0, z }
+    }
+
+    #[rune::function(path = Self::zero)]
+    fn zero() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        }
+    }
+
+    #[rune::function(path = Self::one)]
+    fn one() -> Self {
+        Self {
+            x: 1.0,
+            y: 1.0,
+            z: 1.0,
+        }
+    }
+
+    #[rune::function]
+    fn dot(&mut self, other: &Self) -> f32 {
+        (self.x * other.x) + (self.y * other.y) + (self.z * other.z)
+    }
+
+    #[rune::function(protocol = DISPLAY_FMT)]
+    fn format(&self, formatter: &mut Formatter) -> VmResult<()> {
+        vm_write!(formatter, "{:?}", self)
+    }
+
+    #[rune::function(protocol = DEBUG_FMT)]
+    fn format_debug(&self, formatter: &mut Formatter) -> VmResult<()> {
+        vm_write!(formatter, "{:?}", self)
+    }
+
+    #[rune::function(protocol = ADD)]
+    fn add(&self, other: &Self) -> Self {
+        Self {
+            x: self.x + other.x,
+            y: self.y + other.y,
+            z: self.z + other.z,
+        }
+    }
+
+    #[rune::function(protocol = ADD_ASSIGN)]
+    fn add_assign(&mut self, other: &Self) {
+        self.x += other.x;
+        self.y += other.y;
+        self.z += other.z;
+    }
+
+    #[rune::function(protocol = SUB)]
+    fn sub(&self, other: &Self) -> Self {
+        Self {
+            x: self.x - other.x,
+            y: self.y - other.y,
+            z: self.z - other.z,
+        }
+    }
+
+    #[rune::function(protocol = SUB_ASSIGN)]
+    fn sub_assign(&mut self, other: &Self) {
+        self.x -= other.x;
+        self.y -= other.y;
+        self.z -= other.z;
+    }
+
+    #[rune::function(protocol = MUL)]
+    fn mul(&mut self, other: f32) -> Self {
+        Self {
+            x: self.x * other,
+            y: self.y * other,
+            z: self.z * other,
+        }
+    }
+
+    #[rune::function(protocol = MUL_ASSIGN)]
+    fn mul_assign(&mut self, other: f32) {
+        self.x *= other;
+        self.y *= other;
+        self.z *= other;
+    }
+}
+
+//================================================================
+
+#[derive(Any, TryClone, Copy, Clone, Debug)]
+#[rune(item = ::general)]
+pub struct Vec4 {
+    #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
+    pub x: f32,
+    #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
+    pub y: f32,
+    #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
+    pub z: f32,
+    #[rune(get, set, add_assign, sub_assign, div_assign, mul_assign, rem_assign)]
+    pub w: f32,
+}
+
+impl Vec4 {
+    fn module(module: &mut Module) -> anyhow::Result<()> {
+        module.ty::<Self>()?;
+
+        module.function_meta(Self::new)?;
+        module.function_meta(Self::scalar)?;
+        module.function_meta(Self::x)?;
+        module.function_meta(Self::y)?;
+        module.function_meta(Self::z)?;
+        module.function_meta(Self::w)?;
+        module.function_meta(Self::zero)?;
+        module.function_meta(Self::one)?;
+        module.function_meta(Self::dot)?;
+        module.function_meta(Self::format)?;
+        module.function_meta(Self::format_debug)?;
+        module.function_meta(Self::add)?;
+        module.function_meta(Self::add_assign)?;
+        module.function_meta(Self::sub)?;
+        module.function_meta(Self::sub_assign)?;
+        module.function_meta(Self::mul)?;
+        module.function_meta(Self::mul_assign)?;
+
+        Ok(())
+    }
+
+    pub fn rust_new(x: f32, y: f32, z: f32, w: f32) -> Self {
+        Self { x, y, z, w }
+    }
+
+    //================================================================
+
+    #[rune::function(path = Self::new)]
+    fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
+        Self { x, y, z, w }
+    }
+
+    #[rune::function(path = Self::scalar)]
+    fn scalar(value: f32) -> Self {
+        Self {
+            x: value,
+            y: value,
+            z: value,
+            w: value,
+        }
+    }
+
+    #[rune::function(path = Self::x)]
+    fn x(x: f32) -> Self {
+        Self {
+            x,
+            y: 0.0,
+            z: 0.0,
+            w: 0.0,
+        }
+    }
+
+    #[rune::function(path = Self::y)]
+    fn y(y: f32) -> Self {
+        Self {
+            x: 0.0,
+            y,
+            z: 0.0,
+            w: 0.0,
+        }
+    }
+
+    #[rune::function(path = Self::z)]
+    fn z(z: f32) -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            z,
+            w: 0.0,
+        }
+    }
+
+    #[rune::function(path = Self::w)]
+    fn w(w: f32) -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            w,
+        }
+    }
+
+    #[rune::function(path = Self::zero)]
+    fn zero() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            w: 0.0,
+        }
+    }
+
+    #[rune::function(path = Self::one)]
+    fn one() -> Self {
+        Self {
+            x: 1.0,
+            y: 1.0,
+            z: 1.0,
+            w: 1.0,
+        }
+    }
+
+    #[rune::function]
+    fn dot(&mut self, other: &Self) -> f32 {
+        (self.x * other.x) + (self.y * other.y) + (self.z * other.z) + (self.w * other.w)
+    }
+
+    #[rune::function(protocol = DISPLAY_FMT)]
+    fn format(&self, formatter: &mut Formatter) -> VmResult<()> {
+        vm_write!(formatter, "{:?}", self)
+    }
+
+    #[rune::function(protocol = DEBUG_FMT)]
+    fn format_debug(&self, formatter: &mut Formatter) -> VmResult<()> {
+        vm_write!(formatter, "{:?}", self)
+    }
+
+    #[rune::function(protocol = ADD)]
+    fn add(&self, other: &Self) -> Self {
+        Self {
+            x: self.x + other.x,
+            y: self.y + other.y,
+            z: self.z + other.z,
+            w: self.w + other.w,
+        }
+    }
+
+    #[rune::function(protocol = ADD_ASSIGN)]
+    fn add_assign(&mut self, other: &Self) {
+        self.x += other.x;
+        self.y += other.y;
+        self.z += other.z;
+        self.w += other.w;
+    }
+
+    #[rune::function(protocol = SUB)]
+    fn sub(&self, other: &Self) -> Self {
+        Self {
+            x: self.x - other.x,
+            y: self.y - other.y,
+            z: self.z - other.z,
+            w: self.w - other.w,
+        }
+    }
+
+    #[rune::function(protocol = SUB_ASSIGN)]
+    fn sub_assign(&mut self, other: &Self) {
+        self.x -= other.x;
+        self.y -= other.y;
+        self.z -= other.z;
+        self.w -= other.w;
+    }
+
+    #[rune::function(protocol = MUL)]
+    fn mul(&mut self, other: f32) -> Self {
+        Self {
+            x: self.x * other,
+            y: self.y * other,
+            z: self.z * other,
+            w: self.w * other,
+        }
+    }
+
+    #[rune::function(protocol = MUL_ASSIGN)]
+    fn mul_assign(&mut self, other: f32) {
+        self.x *= other;
+        self.y *= other;
+        self.z *= other;
+        self.w *= other;
+    }
+}
+
+//================================================================
+
+#[derive(Any, TryClone, Copy, Clone, Debug)]
+#[rune(item = ::general)]
 pub struct Box2 {
     #[rune(get, set, copy)]
     pub point: Vec2,
@@ -326,6 +673,8 @@ pub fn module() -> anyhow::Result<Module> {
     let mut module = Module::from_meta(self::module_meta)?;
 
     Vec2::module(&mut module)?;
+    Vec3::module(&mut module)?;
+    Vec4::module(&mut module)?;
     Box2::module(&mut module)?;
     Color::module(&mut module)?;
 

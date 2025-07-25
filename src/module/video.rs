@@ -49,7 +49,7 @@
 */
 
 use crate::{
-    module::general::{Box2, Color, Vec2},
+    module::general::{Box2, Color, Vec2, Vec3, Vec4},
     script::State,
 };
 use std::sync::Arc;
@@ -57,7 +57,7 @@ use std::sync::Arc;
 //================================================================
 
 use rune::{
-    Any, Module,
+    Any, Module, Value,
     alloc::HashMap,
     runtime::{Function, VmResult},
 };
@@ -531,6 +531,16 @@ impl Shader {
         module.ty::<Self>()?;
 
         module.function_meta(Self::new)?;
+        module.function_meta(Self::set_uniform_u8)?;
+        module.function_meta(Self::set_uniform_u16)?;
+        module.function_meta(Self::set_uniform_u32)?;
+        module.function_meta(Self::set_uniform_i8)?;
+        module.function_meta(Self::set_uniform_i16)?;
+        module.function_meta(Self::set_uniform_i32)?;
+        module.function_meta(Self::set_uniform_vec_2)?;
+        module.function_meta(Self::set_uniform_vec_3)?;
+        module.function_meta(Self::set_uniform_vec_4)?;
+        module.function_meta(Self::set_uniform_image)?;
 
         Ok(())
     }
@@ -566,6 +576,66 @@ impl Shader {
         Ok(Self {
             data: Arc::new(program),
         })
+    }
+
+    #[rune::function]
+    fn set_uniform_u8(&self, name: String, data: u8) {
+        self.data.use_uniform_if_required(&name, data);
+    }
+
+    #[rune::function]
+    fn set_uniform_u16(&self, name: String, data: u16) {
+        self.data.use_uniform_if_required(&name, data);
+    }
+
+    #[rune::function]
+    fn set_uniform_u32(&self, name: String, data: u32) {
+        self.data.use_uniform_if_required(&name, data);
+    }
+
+    #[rune::function]
+    fn set_uniform_i8(&self, name: String, data: i8) {
+        self.data.use_uniform_if_required(&name, data);
+    }
+
+    #[rune::function]
+    fn set_uniform_i16(&self, name: String, data: i16) {
+        self.data.use_uniform_if_required(&name, data);
+    }
+
+    #[rune::function]
+    fn set_uniform_i32(&self, name: String, data: i32) {
+        self.data.use_uniform_if_required(&name, data);
+    }
+
+    #[rune::function]
+    fn set_uniform_f32(&self, name: String, data: f32) {
+        self.data.use_uniform_if_required(&name, data);
+    }
+
+    #[rune::function]
+    fn set_uniform_vec_2(&self, name: String, data: &Vec2) {
+        self.data
+            .use_uniform_if_required(&name, three_d::vec2(data.x, data.y));
+    }
+
+    #[rune::function]
+    fn set_uniform_vec_3(&self, name: String, data: &Vec3) {
+        self.data
+            .use_uniform_if_required(&name, three_d::vec3(data.x, data.y, data.z));
+    }
+
+    #[rune::function]
+    fn set_uniform_vec_4(&self, name: String, data: &Vec4) {
+        self.data
+            .use_uniform_if_required(&name, three_d::vec4(data.x, data.y, data.z, data.w));
+    }
+
+    #[rune::function]
+    fn set_uniform_image(&self, name: String, data: &Image) {
+        if self.data.requires_uniform(&name) {
+            self.data.use_texture(&name, &data.data);
+        }
     }
 }
 
