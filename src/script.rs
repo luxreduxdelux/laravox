@@ -48,19 +48,16 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-use crate::module::general::Vec2;
+//use crate::module::general::Vec2;
 use gilrs::{Event, GamepadId, Gilrs};
-use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher, event};
+use koto::{
+    Koto,
+    runtime::{CallArgs, KMap, KValue},
+};
+use notify::{EventKind, RecommendedWatcher, event};
 use rodio::{OutputStream, OutputStreamHandle};
-use rune::{
-    Any, Context, Diagnostics, FromValue, Module, Options, Source, Sources, Value, Vm,
-    runtime::{Function, GuardedArgs},
-    termcolor::{Buffer, ColorChoice, StandardStream},
-};
-use std::{
-    collections::HashMap,
-    sync::{Arc, mpsc::Receiver},
-};
+use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, sync::mpsc::Receiver};
 use three_d::FrameInput;
 use winit::{
     event_loop::ControlFlow,
@@ -73,11 +70,6 @@ pub struct Script {
     /// Rune virtual machine handle.
     #[allow(dead_code)]
     pub handle: Option<Handle>,
-    /// Rune context.
-    #[allow(dead_code)]
-    context: Context,
-    /// Rune state.
-    value: Option<Value>,
     /// Rust state.
     pub state: Option<State>,
     /// Rune error.
@@ -86,11 +78,8 @@ pub struct Script {
 
 impl Script {
     pub fn new() -> anyhow::Result<Self> {
-        // get the Rune context.
-        let context = Self::context()?;
-
         // get the Rune compilation unit, with the Rune source and context.
-        let compile = Handle::new(&context);
+        let compile = Handle::new();
 
         // get the Rune handle, or alternatively, the error message, if any compile error was found.
         let (handle, error) = match compile {
@@ -100,84 +89,67 @@ impl Script {
 
         Ok(Self {
             handle,
-            context,
-            value: None,
             state: None,
             error,
         })
     }
 
-    pub fn context() -> anyhow::Result<Context> {
-        // get the Rune context, with the Laravox/Rune standard library.
-        let mut context = Context::with_default_modules()?;
-
-        context.install(rune_modules::json::module(true)?)?;
-        context.install(rune_modules::toml::module(true)?)?;
-
-        let mut module = Module::new();
-        module.ty::<Window>()?;
-        module.ty::<State>()?;
-
-        context.install(module)?;
-        context.install(crate::module::general::module()?)?;
-        context.install(crate::module::video::module()?)?;
-        context.install(crate::module::audio::module()?)?;
-        context.install(crate::module::input::module()?)?;
-        context.install(crate::module::file::module()?)?;
-        context.install(crate::module::physical::module()?)?;
-
-        Ok(context)
-    }
-
     pub fn window(&mut self) -> Window {
-        let window = Window::default();
-
+        /*
         // we have a handle to the Rune VM.
-        if let Some(handle) = &self.handle {
+        if let Some(handle) = &mut self.handle {
             // call the window entry-point.
-            match handle.safe_call(&handle.window, (window,)) {
-                Ok(value) => return value,
+            match handle.safe_call(handle.window.clone(), &[]) {
+                Ok(value) => koto::serde::from_koto_value(value).unwrap(),
                 Err(error) => {
                     // error in entry-point, return default window.
                     self.error = Some(error.to_string());
                 }
             }
         }
+         */
 
         Window::default()
     }
 
     fn begin(&mut self, frame: FrameInput) {
-        if let Some(handle) = &self.handle {
+        if let Some(handle) = &mut self.handle {
             let mut state = State::new(frame);
 
-            match handle.safe_call(&handle.begin, (&mut state,)) {
-                Ok(value) => {
-                    self.value = Some(value);
-                }
+            unsafe {
+                GLOBAL_STATE = &mut state;
+            }
+
+            self.state = Some(state);
+
+            match handle.safe_call(handle.begin.clone(), &[]) {
+                Ok(_) => {}
                 Err(error) => {
                     self.error = Some(error.to_string());
                 }
             }
-
-            self.state = Some(state);
         }
     }
 
     pub fn frame(&mut self, frame: FrameInput, control_flow: &mut ControlFlow) {
-        if let Some(handle) = &self.handle {
-            if let Some(value) = &self.value
-                && let Some(state) = &mut self.state
-            {
+        if let Some(handle) = &mut self.handle {
+            if let Some(state) = &mut self.state {
+                unsafe {
+                    let mut state = &*GLOBAL_STATE;
+                }
+
                 state.frame = frame.clone();
 
-                match handle.safe_call(&handle.frame, (value, state)) {
-                    Ok(value) => match value {
+                match handle.safe_call(handle.frame.clone(), &[]) {
+                    Ok(_) => {}
+                    /*
+                    match value {
                         1 => control_flow.set_exit(),
                         2 => self.rebuild(),
                         3 => self.restart(frame),
                         _ => {}
-                    },
+                    }
+                     */
                     Err(error) => {
                         self.error = Some(error.to_string());
                     }
@@ -189,11 +161,11 @@ impl Script {
     }
 
     pub fn close(&mut self) {
-        if let Some(handle) = &self.handle
-            && let Some(value) = &self.value
-        {
-            match handle.safe_call(&handle.close, (value,)) {
-                Ok(value) => value,
+        println!("Call close.");
+
+        if let Some(handle) = &mut self.handle {
+            match handle.safe_call(handle.close.clone(), &[]) {
+                Ok(_) => {}
                 Err(error) => {
                     self.error = Some(error.to_string());
                 }
@@ -204,7 +176,7 @@ impl Script {
     pub fn rebuild(&mut self) {
         self.error = None;
 
-        match Handle::new(&self.context) {
+        match Handle::new() {
             Ok(value) => self.handle = Some(value),
             Err(error) => self.error = Some(error.to_string()),
         }
@@ -213,7 +185,7 @@ impl Script {
     pub fn restart(&mut self, frame: FrameInput) {
         self.error = None;
 
-        match Handle::new(&self.context) {
+        match Handle::new() {
             Ok(value) => self.handle = Some(value),
             Err(error) => self.error = Some(error.to_string()),
         }
@@ -238,17 +210,16 @@ impl Script {
 pub struct Handle {
     /// Rune virtual machine.
     #[allow(dead_code)]
-    handle: Vm,
-    /// Rune source code.
-    source: Sources,
+    handle: Koto,
+    //source: Sources,
     /// entry-point function; retrieve window configuration.
-    window: Function,
+    window: KValue,
     /// entry-point function; retrieve Rune state.
-    begin: Function,
+    begin: KValue,
     /// entry-point function; main loop.
-    frame: Function,
+    frame: KValue,
     /// entry-point function; Rune state destructor.
-    close: Function,
+    close: KValue,
     /// source file watcher.
     watcher: Option<(
         RecommendedWatcher,
@@ -256,131 +227,74 @@ pub struct Handle {
     )>,
 }
 
-impl Handle {
-    const MAIN_PATH: &str = "main/main.rn";
-    const MAIN_NAME: &str = "Main";
-    const CALL_WINDOW: &str = "window";
-    const CALL_BEGIN: &str = "begin";
-    const CALL_FRAME: &str = "frame";
-    const CALL_CLOSE: &str = "close";
+impl<'a> Handle {
+    const MAIN_PATH: &'static str = "main/main.koto";
+    const MAIN_NAME: &'static str = "Main";
+    const CALL_WINDOW: &'static str = "window";
+    const CALL_BEGIN: &'static str = "begin";
+    const CALL_FRAME: &'static str = "frame";
+    const CALL_CLOSE: &'static str = "close";
 
-    fn new(context: &Context) -> anyhow::Result<Self> {
-        // read the main source file.
-        let mut source = Sources::new();
-        source.insert(Source::from_path(Self::MAIN_PATH)?)?;
-
-        //================================================================
-
-        let mut diagnostic = Diagnostics::new();
-
-        let unit = rune::prepare(&mut source)
-            .with_context(context)
-            .with_diagnostics(&mut diagnostic)
-            .build();
-
-        // diagnostic may have warning/error data.
-        if !diagnostic.is_empty() {
-            // a color and plain buffer. color will print out to the standard error stream.
-            let mut color = StandardStream::stderr(ColorChoice::Auto);
-            let mut plain = Buffer::no_color();
-
-            // write warning/error data.
-            diagnostic.emit(&mut color, &source)?;
-            diagnostic.emit(&mut plain, &source)?;
-
-            // error found, return error string.
-            if diagnostic.has_error() {
-                return Err(anyhow::Error::msg(String::from_utf8(plain.into_inner())?));
-            }
+    fn get_function(export: &KMap, name: &str) -> anyhow::Result<KValue> {
+        if let Some(call) = export.get(name) {
+            Ok(call)
+        } else {
+            Err(anyhow::Error::msg(format!(
+                "Handle::get_function(): Couldn't find function \"{name}\"."
+            )))
         }
+    }
 
-        //================================================================
+    fn new() -> anyhow::Result<Self> {
+        let mut handle = Koto::default();
+        let prelude = handle.prelude();
 
-        // create a file-system path watcher.
-        let (tx, rx) = std::sync::mpsc::channel();
-        let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
-        let mut watcher_list = watcher.paths_mut();
-        let mut watcher_find = 0;
+        prelude.insert("general", crate::module::general::module());
 
-        // iterate through the list of each source file found in the compile stage.
-        while let Some(source) = source.get(rune::SourceId::new(watcher_find)) {
-            if let Some(path) = source.path() {
-                // watch source file.
-                watcher_list.add(path, RecursiveMode::NonRecursive)?;
-            }
+        handle.compile_and_run(&std::fs::read_to_string(Self::MAIN_PATH)?)?;
 
-            watcher_find += 1;
-        }
+        let export = handle.exports();
 
-        watcher_list.commit()?;
-
-        //================================================================
-
-        // create Rune virtual machine.
-        let handle = Vm::new(Arc::new(context.runtime()?), Arc::new(unit?));
+        let window = Self::get_function(export, Self::CALL_WINDOW)?;
+        let begin = Self::get_function(export, Self::CALL_BEGIN)?;
+        let frame = Self::get_function(export, Self::CALL_FRAME)?;
+        let close = Self::get_function(export, Self::CALL_CLOSE)?;
 
         Ok(Self {
-            source,
-            window: handle.lookup_function([Self::MAIN_NAME, Self::CALL_WINDOW])?,
-            begin: handle.lookup_function([Self::MAIN_NAME, Self::CALL_BEGIN])?,
-            frame: handle.lookup_function([Self::MAIN_NAME, Self::CALL_FRAME])?,
-            close: handle.lookup_function([Self::MAIN_NAME, Self::CALL_CLOSE])?,
             handle,
-            watcher: Some((watcher, rx)),
+            window,
+            begin,
+            frame,
+            close,
+            watcher: None,
         })
     }
 
-    fn safe_call<A: GuardedArgs, R: FromValue>(
-        &self,
-        call: &Function,
+    fn safe_call<A: Into<CallArgs<'a>>>(
+        &'a mut self,
+        call: KValue,
         argument: A,
-    ) -> anyhow::Result<R> {
-        match call.call(argument) {
-            rune::runtime::VmResult::Ok(value) => Ok(value),
-            rune::runtime::VmResult::Err(error) => {
-                // a color and plain buffer. color will print out to the standard error stream.
-                let mut color = StandardStream::stderr(ColorChoice::Auto);
-                let mut plain = Buffer::no_color();
-
-                // write warning/error data.
-                error.emit(&mut color, &self.source)?;
-                error.emit(&mut plain, &self.source)?;
-
-                Err(anyhow::Error::msg(String::from_utf8(plain.into_inner())?))
-            }
-        }
+    ) -> anyhow::Result<KValue> {
+        Ok(self.handle.call_function(call, argument)?)
     }
 }
 
 //================================================================
 
-#[derive(Any)]
+#[derive(Deserialize, Serialize)]
 pub struct Window {
-    #[rune(get, set)]
     pub name: String,
-    #[rune(get, set)]
     pub icon: Option<String>,
-    #[rune(get, set)]
     pub scale_min: Option<(u32, u32)>,
-    #[rune(get, set)]
     pub scale_max: Option<(u32, u32)>,
-    #[rune(get, set)]
     pub scale: (u32, u32),
-    #[rune(get, set)]
     pub head: bool,
-    #[rune(get, set)]
     pub sync: bool,
-    #[rune(get, set)]
     pub full: bool,
-    #[rune(get, set)]
     pub decor: bool,
-    #[rune(get, set)]
     pub resize: bool,
-    #[rune(get, set)]
     pub hidden: bool,
-    #[rune(get, set)]
     pub minimize: bool,
-    #[rune(get, set)]
     pub maximize: bool,
 }
 
@@ -406,7 +320,8 @@ impl Default for Window {
 
 //================================================================
 
-#[derive(Any)]
+pub static mut GLOBAL_STATE: *mut State = std::ptr::null_mut();
+
 pub struct State {
     /// OpenGL handle.
     pub frame: FrameInput,
@@ -456,16 +371,16 @@ impl Input {
                     self.window_get.maximize = window.is_maximized();
                     self.window_get.full = window.fullscreen().is_some();
 
-                    self.window_get.scale = Some(Vec2::rust_new(
-                        physical_size.width as f32,
-                        physical_size.height as f32,
-                    ));
+                    //self.window_get.scale = Some(Vec2::rust_new(
+                    //    physical_size.width as f32,
+                    //    physical_size.height as f32,
+                    //));
                 }
                 winit::event::WindowEvent::Moved(physical_position) => {
-                    self.window_get.point = Some(Vec2::rust_new(
-                        physical_position.x as f32,
-                        physical_position.y as f32,
-                    ));
+                    //self.window_get.point = Some(Vec2::rust_new(
+                    //    physical_position.x as f32,
+                    //    physical_position.y as f32,
+                    //));
                 }
                 winit::event::WindowEvent::Focused(focus) => {
                     if let Some(minimize) = window.is_minimized() {
@@ -489,8 +404,8 @@ impl Input {
                     }
                 }
                 winit::event::WindowEvent::CursorMoved { position, .. } => {
-                    self.mouse.point.x = position.x as f32;
-                    self.mouse.point.y = position.y as f32;
+                    //self.mouse.point.x = position.x as f32;
+                    //self.mouse.point.y = position.y as f32;
                 }
                 winit::event::WindowEvent::CursorEntered { .. } => {
                     self.mouse.state = Some(true);
@@ -506,8 +421,8 @@ impl Input {
                         }
                     };
 
-                    self.mouse.wheel.x = x;
-                    self.mouse.wheel.y = y;
+                    //self.mouse.wheel.x = x;
+                    //self.mouse.wheel.y = y;
                 }
                 winit::event::WindowEvent::MouseInput { state, button, .. } => {
                     let button = match button {
@@ -534,8 +449,8 @@ impl Input {
             },
             winit::event::Event::DeviceEvent { event, .. } => match event {
                 winit::event::DeviceEvent::MouseMotion { delta } => {
-                    self.mouse.delta.x = delta.0 as f32;
-                    self.mouse.delta.y = delta.1 as f32;
+                    //self.mouse.delta.x = delta.0 as f32;
+                    //self.mouse.delta.y = delta.1 as f32;
                 }
                 _ => {}
             },
@@ -621,15 +536,15 @@ impl Input {
 
         self.mouse.last_press = None;
         self.mouse.last_release = None;
-        self.mouse.wheel.x = 0.0;
-        self.mouse.wheel.y = 0.0;
-        self.mouse.delta.x = 0.0;
-        self.mouse.delta.y = 0.0;
+        //self.mouse.wheel.x = 0.0;
+        //self.mouse.wheel.y = 0.0;
+        //self.mouse.delta.x = 0.0;
+        //self.mouse.delta.y = 0.0;
         self.mouse.state = None;
 
         // reset all previous window state.
-        self.window_get.point = None;
-        self.window_get.scale = None;
+        //self.window_get.point = None;
+        //self.window_get.scale = None;
 
         // process pad data.
         self.pad.process();
@@ -659,13 +574,13 @@ pub struct Mouse {
     /// mouse button data.
     pub data: [Button; Input::BUTTON_COUNT_MOUSE],
     /// mouse wheel data (delta).
-    pub wheel: Vec2,
+    //pub wheel: Vec2,
     /// mouse cursor window enter-leave state.
     pub state: Option<bool>,
     /// mouse cursor point.
-    pub point: Vec2,
+    //pub point: Vec2,
     /// mouse cursor delta.
-    pub delta: Vec2,
+    //pub delta: Vec2,
     /// last mouse button press.
     pub last_press: Option<usize>,
     /// last mouse button release.
@@ -676,10 +591,10 @@ impl Default for Mouse {
     fn default() -> Self {
         Self {
             data: [Button::default(); Input::BUTTON_COUNT_MOUSE],
-            wheel: Vec2::rust_new(0.0, 0.0),
+            //wheel: Vec2::rust_new(0.0, 0.0),
             state: None,
-            point: Vec2::rust_new(0.0, 0.0),
-            delta: Vec2::rust_new(0.0, 0.0),
+            //point: Vec2::rust_new(0.0, 0.0),
+            //delta: Vec2::rust_new(0.0, 0.0),
             last_press: None,
             last_release: None,
         }
@@ -774,9 +689,9 @@ pub struct WindowGet {
     /// is the window focused?
     pub focus: bool,
     /// has the window point been modified?
-    pub point: Option<Vec2>,
+    //pub point: Option<Vec2>,
     /// has the window scale been modified?
-    pub scale: Option<Vec2>,
+    //pub scale: Option<Vec2>,
     /// is the window full-screen?
     pub full: bool,
 }
@@ -790,17 +705,17 @@ pub struct WindowSet {
     /// focus the window.
     pub focus: Option<()>,
     /// set the window point.
-    pub point: Option<Vec2>,
+    //pub point: Option<Vec2>,
     /// set the window name.
     pub name: Option<String>,
     /// set the window icon.
     pub icon: Option<String>,
     /// set the minimum window scale.
-    pub scale_min: Option<Vec2>,
+    //pub scale_min: Option<Vec2>,
     /// set the maximum window scale.
-    pub scale_max: Option<Vec2>,
+    //pub scale_max: Option<Vec2>,
     /// set the window scale.
-    pub scale: Option<Vec2>,
+    //pub scale: Option<Vec2>,
     /// go full-screen, or window mode.
     pub full: Option<bool>,
     /// cursor icon.

@@ -59,30 +59,9 @@ use crate::{script::*, system::*};
 //================================================================
 
 fn main() -> anyhow::Result<()> {
-    if std::env::var("LARAVOX_LANGUAGE_SERVER").is_ok() {
-        let runtime = tokio::runtime::Runtime::new()?;
-
-        // launch as language server.
-        runtime.block_on(rune::languageserver::run(
-            Script::context()?,
-            rune::Options::from_default_env()?,
-        ))?;
-    } else {
-        // check if any argument has been sent to us. if so, pass it to the Rune CLI.
-        let argument_list: Vec<String> = std::env::args().collect();
-
-        if argument_list.contains(&"doc".to_string()) {
-            // build documentation.
-            rune::cli::Entry::new()
-                .context(&mut |_| Ok(Script::context().unwrap()))
-                .run();
-        } else {
-            // launch normally.
-            let mut script = Script::new()?;
-            let system = System::new(script.window())?;
-            system.run(script)?;
-        }
-    }
+    let mut script = Script::new()?;
+    let system = System::new(script.window())?;
+    system.run(script)?;
 
     Ok(())
 }
