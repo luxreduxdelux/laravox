@@ -117,12 +117,18 @@ impl Function {
 #[derive(Debug, FromMeta)]
 #[darling(derive_syn_parse)]
 struct Class {
+    name: Option<String>,
     info: String,
 }
 
 impl Class {
     fn write(&self, name: &str) {
         let mut buffer = String::new();
+        let name = if let Some(name) = &self.name {
+            name
+        } else {
+            name
+        };
 
         for line in self.info.lines() {
             buffer.push_str(&format!("---{}\n", line.trim()));
@@ -182,6 +188,10 @@ enum ValueKind {
     Box2,
     #[darling(rename = "box_3")]
     Box3,
+    #[darling(rename = "camera_2D")]
+    Camera2D,
+    #[darling(rename = "camera_3D")]
+    Camera3D,
     Color,
     UserData {
         name: String,
@@ -200,6 +210,8 @@ impl Display for ValueKind {
             ValueKind::Vector3 => f.write_str("vector_3"),
             ValueKind::Box2 => f.write_str("box_2"),
             ValueKind::Box3 => f.write_str("box_3"),
+            ValueKind::Camera2D => f.write_str("camera_2D"),
+            ValueKind::Camera3D => f.write_str("camera_3D"),
             ValueKind::Color => f.write_str("color"),
             ValueKind::UserData { name } => f.write_str(name),
         }

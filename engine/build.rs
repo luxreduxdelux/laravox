@@ -81,6 +81,7 @@ color = {}
 "#;
 const META_FILE: &str = "meta.lua";
 const META_PATH: &str = "../engine_macro/out";
+const MAIN_PATH: &str = "../main/";
 
 fn main() {
     let mut buffer = self::META_HEADER.to_string();
@@ -93,5 +94,7 @@ fn main() {
         buffer.push_str(&format!("{}\n\n", file.trim()));
     }
 
-    std::fs::write(self::META_FILE, buffer).unwrap();
+    if std::fs::exists(self::MAIN_PATH).unwrap() {
+        std::fs::write(format!("{}{}", self::MAIN_PATH, self::META_FILE), buffer).unwrap();
+    }
 }

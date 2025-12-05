@@ -53,7 +53,6 @@ use engine_macro::*;
 
 //================================================================
 
-use mlua::prelude::*;
 use raylib::prelude::*;
 
 //================================================================
@@ -69,6 +68,8 @@ pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
 
     Ok(())
 }
+
+//================================================================
 
 #[class(info = "Music class.")]
 struct Music {
@@ -124,7 +125,7 @@ impl Music {
         }
     }
 
-    #[method(from = "music", info = "Stop music.")]
+    #[method(from = "music", info = "Pause music.")]
     fn pause(_: &mlua::Lua, this: &Self) -> mlua::Result<()> {
         unsafe {
             ffi::PauseMusicStream(this.inner);
@@ -132,7 +133,7 @@ impl Music {
         }
     }
 
-    #[method(from = "music", info = "Stop music.")]
+    #[method(from = "music", info = "Resume music.")]
     fn resume(_: &mlua::Lua, this: &Self) -> mlua::Result<()> {
         unsafe {
             ffi::ResumeMusicStream(this.inner);
