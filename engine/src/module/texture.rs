@@ -79,7 +79,11 @@ impl Texture {
         from = "texture",
         info = "Create a new texture resource.",
         parameter(name = "path", info = "Path to texture.", kind = "string"),
-        result(name = "data", info = "File data.", kind = "user_data")
+        result(
+            name = "texture",
+            info = "Texture resource.",
+            kind(user_data(name = "texture"))
+        )
     )]
     fn new(_: &mlua::Lua, path: String) -> mlua::Result<Self> {
         unsafe {
