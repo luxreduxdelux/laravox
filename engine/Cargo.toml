@@ -3,20 +3,14 @@ name    = "engine"
 version = "1.0.0"
 edition = "2024"
 
-[profile.release]
-opt-level     = 3
-lto           = true
-codegen-units = 1
-panic         = "abort"
-strip         = "none"
-
-[profile.dev]
-debug = 0
-
 [dependencies]
-anyhow 	     = { version = "1.0.100" }
-mlua   	     = { version = "0.11.5", features = ["luajit", "vendored", "anyhow", "serde"] }
-raylib 	     = { version = "5.5.1", features = ["with_serde"] }
-serde  	     = { version = "1.0", features = ["derive"] }
-serde_json   = { version = "1.0" }
-engine_macro = { path = "../engine_macro" }
+anyhow 	      = { version = "1.0.100" }
+mlua   	      = { version = "0.11.5", features = ["luajit", "vendored", "anyhow", "serde"] }
+raylib 	      = { version = "5.5.1",  features = ["with_serde"] }
+mimalloc 	  = { version = "0.1.48", features = ["v3"]         }
+serde  	      = { version = "1.0",    features = ["derive"]     }
+serde_json    = { version = "1.0"    }
+renet 		  = { version = "1.2.0"  }
+renet_netcode = { version = "1.2.0"  }
+rfd           = { version = "0.16.0" }
+engine_macro  = { path = "../engine_macro" }

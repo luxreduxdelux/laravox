@@ -58,16 +58,23 @@ use raylib::prelude::*;
 
 //================================================================
 
+#[rustfmt::skip]
 #[module(name = "texture", info = "Texture API.")]
+#[module(name = "texture_target", info = "Texture (render-target) API.")]
 pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
-    let texture = lua.create_table()?;
+    let texture        = lua.create_table()?;
+    let texture_target = lua.create_table()?;
 
-    texture.set("new", lua.create_function(self::Texture::new)?)?;
+    texture.set("new",        lua.create_function(self::Texture::new)?)?;
+    texture_target.set("new", lua.create_function(self::TextureTarget::new)?)?;
 
-    global.set("texture", texture)?;
+    global.set("texture",        texture)?;
+    global.set("texture_target", texture_target)?;
 
     Ok(())
 }
+
+//================================================================
 
 #[class(info = "Texture class.")]
 struct Texture {
@@ -120,8 +127,8 @@ impl Texture {
         ),
     ) -> mlua::Result<()> {
         unsafe {
-            let source: Rectangle = lua.from_value(source)?;
-            let target: Rectangle = lua.from_value(target)?;
+            let source: Box2 = lua.from_value(source)?;
+            let target: Box2 = lua.from_value(target)?;
             let point: Vector2 = lua.from_value(point)?;
             let color: Color = lua.from_value(color)?;
 
@@ -136,6 +143,18 @@ impl Texture {
 
             Ok(())
         }
+    }
+
+    #[method(
+        from = "texture",
+        info = "Get texture scale.",
+        result(name = "scale", info = "Texture scale.", kind = "vector_2")
+    )]
+    fn get_scale(lua: &mlua::Lua, this: &Self) -> mlua::Result<mlua::Value> {
+        lua.to_value(&Vector2::new(
+            this.inner.width as f32,
+            this.inner.height as f32,
+        ))
     }
 }
 
@@ -152,5 +171,130 @@ impl mlua::UserData for Texture {
         method.add_method("draw", |lua, this, (text, point, scale, space, color)| {
             Self::draw(lua, this, (text, point, scale, space, color))
         });
+        method.add_method("get_scale", |lua, this, _: ()| Self::get_scale(lua, this));
+    }
+}
+
+//================================================================
+
+#[class(name = "texture_target", info = "Texture (render-target) class.")]
+struct TextureTarget {
+    inner: ffi::RenderTexture,
+}
+
+impl TextureTarget {
+    #[function(
+        from = "texture_target",
+        info = "Create a new render-target texture resource.",
+        parameter(
+            name = "scale",
+            info = "Render-target texture scale.",
+            kind = "vector_2"
+        ),
+        result(
+            name = "texture_target",
+            info = "Render-target texture resource.",
+            kind(user_data(name = "texture_target"))
+        )
+    )]
+    fn new(lua: &mlua::Lua, scale: mlua::Value) -> mlua::Result<Self> {
+        unsafe {
+            let scale: Vector2 = lua.from_value(scale)?;
+            let inner = ffi::LoadRenderTexture(scale.x as i32, scale.y as i32);
+
+            if ffi::IsRenderTextureValid(inner) {
+                Ok(Self { inner })
+            } else {
+                Err(mlua::Error::runtime(
+                    "texture_target.new(): Error loading render-target texture.",
+                ))
+            }
+        }
+    }
+
+    #[method(
+        from = "texture_target",
+        info = "Initialize a draw session.",
+        parameter(name = "call", info = "Draw function.", kind = "function")
+    )]
+    fn begin(_: &mlua::Lua, this: &Self, call: mlua::Function) -> mlua::Result<()> {
+        unsafe {
+            ffi::BeginTextureMode(this.inner);
+            let call = call.call::<()>(());
+            ffi::EndTextureMode();
+
+            call
+        }
+    }
+
+    #[method(
+        from = "texture_target",
+        info = "Draw texture.",
+        parameter(name = "source", info = "Source of texture to draw.", kind = "box_2"),
+        parameter(name = "target", info = "Target of texture to draw.", kind = "box_2"),
+        parameter(name = "point", info = "Point of texture to draw.", kind = "vector_2"),
+        parameter(name = "angle", info = "Angle of texture to draw.", kind = "number"),
+        parameter(name = "color", info = "Color of texture to draw.", kind = "color")
+    )]
+    fn draw(
+        lua: &mlua::Lua,
+        this: &Self,
+        (source, target, point, angle, color): (
+            mlua::Value,
+            mlua::Value,
+            mlua::Value,
+            f32,
+            mlua::Value,
+        ),
+    ) -> mlua::Result<()> {
+        unsafe {
+            let mut source: Box2 = lua.from_value(source)?;
+            let target: Box2 = lua.from_value(target)?;
+            let point: Vector2 = lua.from_value(point)?;
+            let color: Color = lua.from_value(color)?;
+
+            source.s_y = -source.s_y;
+
+            ffi::DrawTexturePro(
+                this.inner.texture,
+                source.into(),
+                target.into(),
+                point.into(),
+                angle,
+                color.into(),
+            );
+
+            Ok(())
+        }
+    }
+
+    #[method(
+        from = "texture_target",
+        info = "Get texture scale.",
+        result(name = "scale", info = "Texture scale.", kind = "vector_2")
+    )]
+    fn get_scale(lua: &mlua::Lua, this: &Self) -> mlua::Result<mlua::Value> {
+        lua.to_value(&Vector2::new(
+            this.inner.texture.width as f32,
+            this.inner.texture.height as f32,
+        ))
+    }
+}
+
+impl Drop for TextureTarget {
+    fn drop(&mut self) {
+        unsafe {
+            ffi::UnloadRenderTexture(self.inner);
+        }
+    }
+}
+
+impl mlua::UserData for TextureTarget {
+    fn add_methods<M: mlua::UserDataMethods<Self>>(method: &mut M) {
+        method.add_method("begin", Self::begin);
+        method.add_method("draw", |lua, this, (text, point, scale, space, color)| {
+            Self::draw(lua, this, (text, point, scale, space, color))
+        });
+        method.add_method("get_scale", |lua, this, _: ()| Self::get_scale(lua, this));
     }
 }

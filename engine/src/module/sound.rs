@@ -53,7 +53,6 @@ use engine_macro::*;
 
 //================================================================
 
-use mlua::prelude::*;
 use raylib::prelude::*;
 
 //================================================================
@@ -63,8 +62,6 @@ use raylib::prelude::*;
 pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
     let sound = lua.create_table()?;
 
-    sound.set("get_master_volume", lua.create_function(self::get_master_volume)?)?;
-    sound.set("set_master_volume", lua.create_function(self::set_master_volume)?)?;
     sound.set("new", lua.create_function(self::Sound::new)?)?;
 
     global.set("sound", sound)?;
@@ -72,26 +69,7 @@ pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[function(
-    from = "sound",
-    info = "Get the master volume.",
-    result(name = "volume", info = "Master volume.", kind = "number")
-)]
-fn get_master_volume(_: &mlua::Lua, _: ()) -> mlua::Result<f32> {
-    unsafe { Ok(ffi::GetMasterVolume()) }
-}
-
-#[function(
-    from = "sound",
-    info = "Set the master volume.",
-    parameter(name = "volume", info = "Master volume.", kind = "number")
-)]
-fn set_master_volume(_: &mlua::Lua, volume: f32) -> mlua::Result<()> {
-    unsafe {
-        ffi::SetMasterVolume(volume);
-        Ok(())
-    }
-}
+//================================================================
 
 #[class(info = "Sound class.")]
 struct Sound {
@@ -139,7 +117,7 @@ impl Sound {
         }
     }
 
-    #[method(from = "sound", info = "Stop sound.")]
+    #[method(from = "sound", info = "Pause sound.")]
     fn pause(_: &mlua::Lua, this: &Self) -> mlua::Result<()> {
         unsafe {
             ffi::PauseSound(this.inner);
@@ -147,7 +125,7 @@ impl Sound {
         }
     }
 
-    #[method(from = "sound", info = "Stop sound.")]
+    #[method(from = "sound", info = "Resume sound.")]
     fn resume(_: &mlua::Lua, this: &Self) -> mlua::Result<()> {
         unsafe {
             ffi::ResumeSound(this.inner);

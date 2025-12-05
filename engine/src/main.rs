@@ -52,15 +52,22 @@ mod module;
 
 //================================================================
 
+use mimalloc::MiMalloc;
 use mlua::prelude::*;
 use raylib::prelude::*;
 use serde::Deserialize;
 
+// TO-DO not sure if this actually does impact Lua at all
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
+
 //================================================================
 
+#[allow(dead_code)]
 struct Context {
     handle: RaylibHandle,
     thread: RaylibThread,
+    audio: RaylibAudio,
 }
 
 #[derive(Deserialize)]
@@ -69,12 +76,6 @@ struct ContextInfo {
     scale: (i32, i32),
     sync: bool,
     full: bool,
-    resize: bool,
-    hidden: bool,
-    minimize: bool,
-    maximize: bool,
-    border: bool,
-    rate: u32,
 }
 
 impl Context {
@@ -90,44 +91,33 @@ impl Context {
         if info.full {
             flag += ConfigFlags::FLAG_FULLSCREEN_MODE as u32;
         }
-        if info.resize {
-            flag += ConfigFlags::FLAG_WINDOW_RESIZABLE as u32;
-        }
-        if info.hidden {
-            flag += ConfigFlags::FLAG_WINDOW_HIDDEN as u32;
-        }
-        if info.minimize {
-            flag += ConfigFlags::FLAG_WINDOW_MINIMIZED as u32;
-        }
-        if info.maximize {
-            flag += ConfigFlags::FLAG_WINDOW_MAXIMIZED as u32;
-        }
-        if info.border {
-            flag += ConfigFlags::FLAG_BORDERLESS_WINDOWED_MODE as u32;
-        }
 
         unsafe {
             ffi::SetConfigFlags(flag);
         }
 
-        let (mut handle, thread) = raylib::init()
+        let (handle, thread) = raylib::init()
             .size(info.scale.0, info.scale.1)
             .title(&info.title)
+            .resizable()
+            .log_level(TraceLogLevel::LOG_NONE)
             .build();
 
-        handle.set_target_fps(info.rate);
+        let audio = raylib::audio::RaylibAudio::init_audio_device()?;
 
         script.set_global(true)?;
 
-        Ok(Self { handle, thread })
+        Ok(Self {
+            handle,
+            thread,
+            audio,
+        })
     }
 }
 
 //================================================================
 
-#[derive(Default)]
 enum ScriptState {
-    #[default]
     Success,
     Failure(String),
 }
@@ -142,7 +132,7 @@ struct Script {
 }
 
 impl Script {
-    const MAIN_PATH: &str = "data/main";
+    const MAIN_PATH: &str = "main/main";
     const ENTRY_INFO: &str = "info";
     const ENTRY_MAIN: &str = "main";
     const ENTRY_FAIL: &str = "fail";
@@ -160,7 +150,7 @@ impl Script {
 
         let script = Self {
             lua,
-            state: ScriptState::default(),
+            state: ScriptState::Success,
             table,
             info,
             main,
@@ -191,11 +181,31 @@ impl Script {
             crate::module::font::set_global(&self.lua, &global)?;
             crate::module::input::set_global(&self.lua, &global)?;
             crate::module::music::set_global(&self.lua, &global)?;
+            crate::module::screen::set_global(&self.lua, &global)?;
             crate::module::sound::set_global(&self.lua, &global)?;
             crate::module::texture::set_global(&self.lua, &global)?;
             crate::module::window::set_global(&self.lua, &global)?;
         } else {
             crate::module::data::set_global(&self.lua, &global)?;
+            crate::module::network::set_global(&self.lua, &global)?;
+
+            self.lua.globals().set(
+                "print",
+                self.lua
+                    .create_function(|_, (value, debug): (mlua::Value, bool)| {
+                        if debug {
+                            let format = format!("{value:#?}");
+                            println!("{format}");
+                            return Ok(Some(format));
+                        } else if let Ok(value) = value.to_string() {
+                            println!("{value}");
+                        } else {
+                            println!("{value:#?}");
+                        }
+
+                        Ok(None)
+                    })?,
+            )?;
         }
 
         Ok(())
@@ -204,9 +214,23 @@ impl Script {
 
 //================================================================
 
+fn throw_error<T, E: std::string::ToString + std::fmt::Debug>(result: Result<T, E>) -> T {
+    match result {
+        Ok(value) => value,
+        Err(error) => {
+            rfd::MessageDialog::new()
+                .set_level(rfd::MessageLevel::Error)
+                .set_title("Fatal Error")
+                .set_description(error.to_string())
+                .show();
+            panic!("{error:?}")
+        }
+    }
+}
+
 fn main() -> anyhow::Result<()> {
-    let mut script = Script::new(false)?;
-    let _context = Context::new(&script)?;
+    let mut script = throw_error(Script::new(false));
+    let _context = throw_error(Context::new(&script));
 
     loop {
         match script.state {
@@ -220,7 +244,7 @@ fn main() -> anyhow::Result<()> {
                         let new = Script::new(true);
 
                         if let Err(error) = new {
-                            script.state = ScriptState::Failure(error.to_string())
+                            script.state = ScriptState::Failure(error.to_string());
                         } else if let Ok(new) = new {
                             script = new;
                         }
@@ -230,15 +254,14 @@ fn main() -> anyhow::Result<()> {
                 }
             }
             ScriptState::Failure(ref error) => {
-                let code = script
-                    .fail
-                    .call::<bool>((&script.table, error.to_string()))?;
+                let code =
+                    throw_error(script.fail.call::<bool>((&script.table, error.to_string())));
 
                 if code {
                     let new = Script::new(true);
 
                     if let Err(error) = new {
-                        script.state = ScriptState::Failure(error.to_string())
+                        script.state = ScriptState::Failure(error.to_string());
                     } else if let Ok(new) = new {
                         script = new;
                     }
