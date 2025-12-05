@@ -67,6 +67,13 @@ struct Context {
 struct ContextInfo {
     title: String,
     scale: (i32, i32),
+    sync: bool,
+    full: bool,
+    resize: bool,
+    hidden: bool,
+    minimize: bool,
+    maximize: bool,
+    border: bool,
     rate: u32,
 }
 
@@ -74,6 +81,34 @@ impl Context {
     fn new(script: &Script) -> anyhow::Result<Self> {
         let info = script.info.call::<LuaValue>(())?;
         let info: ContextInfo = script.lua.from_value(info)?;
+
+        let mut flag = 0;
+
+        if info.sync {
+            flag += ConfigFlags::FLAG_VSYNC_HINT as u32;
+        }
+        if info.full {
+            flag += ConfigFlags::FLAG_FULLSCREEN_MODE as u32;
+        }
+        if info.resize {
+            flag += ConfigFlags::FLAG_WINDOW_RESIZABLE as u32;
+        }
+        if info.hidden {
+            flag += ConfigFlags::FLAG_WINDOW_HIDDEN as u32;
+        }
+        if info.minimize {
+            flag += ConfigFlags::FLAG_WINDOW_MINIMIZED as u32;
+        }
+        if info.maximize {
+            flag += ConfigFlags::FLAG_WINDOW_MAXIMIZED as u32;
+        }
+        if info.border {
+            flag += ConfigFlags::FLAG_BORDERLESS_WINDOWED_MODE as u32;
+        }
+
+        unsafe {
+            ffi::SetConfigFlags(flag);
+        }
 
         let (mut handle, thread) = raylib::init()
             .size(info.scale.0, info.scale.1)
@@ -107,13 +142,21 @@ struct Script {
 }
 
 impl Script {
+    const MAIN_PATH: &str = "data/main";
+    const ENTRY_INFO: &str = "info";
+    const ENTRY_MAIN: &str = "main";
+    const ENTRY_FAIL: &str = "fail";
+    const HOOK_NAME: &str = "laravox";
+
     fn new(set_window_global: bool) -> anyhow::Result<Self> {
         let lua = Lua::new();
 
-        let table: mlua::Table = lua.load("require(\"data/main\")").eval()?;
-        let info = table.get("info")?;
-        let main = table.get("main")?;
-        let fail = table.get("fail")?;
+        let table: mlua::Table = lua
+            .load(format!("require(\"{}\")", Self::MAIN_PATH))
+            .eval()?;
+        let info = table.get(Self::ENTRY_INFO)?;
+        let main = table.get(Self::ENTRY_MAIN)?;
+        let fail = table.get(Self::ENTRY_FAIL)?;
 
         let script = Self {
             lua,
@@ -135,11 +178,11 @@ impl Script {
 
     fn set_global(&self, window: bool) -> anyhow::Result<()> {
         let global = self.lua.globals();
-        let global = if let Ok(global) = global.get::<mlua::Table>("laravox") {
+        let global = if let Ok(global) = global.get::<mlua::Table>(Self::HOOK_NAME) {
             global
         } else {
             let table = self.lua.create_table()?;
-            global.set("laravox", &table)?;
+            global.set(Self::HOOK_NAME, &table)?;
 
             table
         };
@@ -147,6 +190,8 @@ impl Script {
         if window {
             crate::module::font::set_global(&self.lua, &global)?;
             crate::module::input::set_global(&self.lua, &global)?;
+            crate::module::music::set_global(&self.lua, &global)?;
+            crate::module::sound::set_global(&self.lua, &global)?;
             crate::module::texture::set_global(&self.lua, &global)?;
             crate::module::window::set_global(&self.lua, &global)?;
         } else {

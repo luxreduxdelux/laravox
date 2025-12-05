@@ -183,7 +183,9 @@ enum ValueKind {
     #[darling(rename = "box_3")]
     Box3,
     Color,
-    UserData,
+    UserData {
+        name: String,
+    },
 }
 
 impl Display for ValueKind {
@@ -199,7 +201,7 @@ impl Display for ValueKind {
             ValueKind::Box2 => f.write_str("box_2"),
             ValueKind::Box3 => f.write_str("box_3"),
             ValueKind::Color => f.write_str("color"),
-            ValueKind::UserData => f.write_str("userdata"),
+            ValueKind::UserData { name } => f.write_str(name),
         }
     }
 }

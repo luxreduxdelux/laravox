@@ -79,7 +79,7 @@ impl Font {
         from = "font",
         info = "Create a new font resource.",
         parameter(name = "path", info = "Path to font.", kind = "string"),
-        result(name = "data", info = "File data.", kind = "user_data")
+        result(name = "font", info = "Font resource.", kind(user_data(name = "font")))
     )]
     fn new(_: &mlua::Lua, path: String) -> mlua::Result<Self> {
         unsafe {
