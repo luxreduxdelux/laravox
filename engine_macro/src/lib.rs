@@ -80,7 +80,9 @@ impl Function {
         for (i, parameter) in self.parameter.iter().enumerate() {
             buffer.push_str(&format!(
                 "---@param {} {} # {}\n",
-                parameter.name, parameter.kind, parameter.info
+                parameter.get_name(),
+                parameter.kind,
+                parameter.info
             ));
 
             if i == self.parameter.len() - 1 {
@@ -93,7 +95,9 @@ impl Function {
         for result in &self.result {
             buffer.push_str(&format!(
                 "---@return {} {} # {}\n",
-                result.kind, result.name, result.info
+                result.get_kind(),
+                result.name,
+                result.info
             ));
         }
 
@@ -171,6 +175,29 @@ struct Value {
     name: String,
     info: String,
     kind: ValueKind,
+    optional: Option<bool>,
+}
+
+impl Value {
+    fn get_name(&self) -> String {
+        if let Some(optional) = self.optional
+            && optional
+        {
+            format!("{}?", self.name)
+        } else {
+            self.name.clone()
+        }
+    }
+
+    fn get_kind(&self) -> String {
+        if let Some(optional) = self.optional
+            && optional
+        {
+            format!("{}|nil", self.kind)
+        } else {
+            self.kind.to_string()
+        }
+    }
 }
 
 #[derive(Debug, FromMeta)]
@@ -180,18 +207,19 @@ enum ValueKind {
     Boolean,
     Function,
     Table,
-    #[darling(rename = "vector_2")]
+    #[darling(rename = "Vector2")]
     Vector2,
-    #[darling(rename = "vector_3")]
+    #[darling(rename = "Vector3")]
     Vector3,
-    #[darling(rename = "box_2")]
+    #[darling(rename = "Box2")]
     Box2,
-    #[darling(rename = "box_3")]
+    #[darling(rename = "Box3")]
     Box3,
-    #[darling(rename = "camera_2D")]
+    #[darling(rename = "Camera2D")]
     Camera2D,
-    #[darling(rename = "camera_3D")]
+    #[darling(rename = "Camera3D")]
     Camera3D,
+    #[darling(rename = "Color")]
     Color,
     UserData {
         name: String,
@@ -206,13 +234,13 @@ impl Display for ValueKind {
             ValueKind::Boolean => f.write_str("boolean"),
             ValueKind::Function => f.write_str("function"),
             ValueKind::Table => f.write_str("table"),
-            ValueKind::Vector2 => f.write_str("vector_2"),
-            ValueKind::Vector3 => f.write_str("vector_3"),
-            ValueKind::Box2 => f.write_str("box_2"),
-            ValueKind::Box3 => f.write_str("box_3"),
-            ValueKind::Camera2D => f.write_str("camera_2D"),
-            ValueKind::Camera3D => f.write_str("camera_3D"),
-            ValueKind::Color => f.write_str("color"),
+            ValueKind::Vector2 => f.write_str("Vector2"),
+            ValueKind::Vector3 => f.write_str("Vector3"),
+            ValueKind::Box2 => f.write_str("Box2"),
+            ValueKind::Box3 => f.write_str("Box3"),
+            ValueKind::Camera2D => f.write_str("Camera2D"),
+            ValueKind::Camera3D => f.write_str("Camera3D"),
+            ValueKind::Color => f.write_str("Color"),
             ValueKind::UserData { name } => f.write_str(name),
         }
     }
@@ -264,7 +292,7 @@ pub fn class(argument_list: TokenStream, input: TokenStream) -> TokenStream {
     };
     let input = syn::parse_macro_input!(input as ItemStruct);
 
-    class.write(&input.ident.to_string().to_lowercase());
+    class.write(&input.ident.to_string());
 
     TokenStream::from(quote! {
         #input

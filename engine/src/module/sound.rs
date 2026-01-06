@@ -84,7 +84,7 @@ impl Sound {
         result(
             name = "sound",
             info = "Sound resource.",
-            kind(user_data(name = "sound"))
+            kind(user_data(name = "Sound"))
         )
     )]
     fn new(_: &mlua::Lua, path: String) -> mlua::Result<Self> {
@@ -101,7 +101,7 @@ impl Sound {
         }
     }
 
-    #[method(from = "sound", info = "Play sound.")]
+    #[method(from = "Sound", info = "Play sound.")]
     fn play(_: &mlua::Lua, this: &Self) -> mlua::Result<()> {
         unsafe {
             ffi::PlaySound(this.inner);
@@ -109,7 +109,7 @@ impl Sound {
         }
     }
 
-    #[method(from = "sound", info = "Stop sound.")]
+    #[method(from = "Sound", info = "Stop sound.")]
     fn stop(_: &mlua::Lua, this: &Self) -> mlua::Result<()> {
         unsafe {
             ffi::StopSound(this.inner);
@@ -117,7 +117,7 @@ impl Sound {
         }
     }
 
-    #[method(from = "sound", info = "Pause sound.")]
+    #[method(from = "Sound", info = "Pause sound.")]
     fn pause(_: &mlua::Lua, this: &Self) -> mlua::Result<()> {
         unsafe {
             ffi::PauseSound(this.inner);
@@ -125,7 +125,7 @@ impl Sound {
         }
     }
 
-    #[method(from = "sound", info = "Resume sound.")]
+    #[method(from = "Sound", info = "Resume sound.")]
     fn resume(_: &mlua::Lua, this: &Self) -> mlua::Result<()> {
         unsafe {
             ffi::ResumeSound(this.inner);

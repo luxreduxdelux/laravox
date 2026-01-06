@@ -84,7 +84,7 @@ impl Music {
         result(
             name = "music",
             info = "Music resource.",
-            kind(user_data(name = "music"))
+            kind(user_data(name = "Music"))
         )
     )]
     fn new(_: &mlua::Lua, path: String) -> mlua::Result<Self> {
@@ -101,7 +101,7 @@ impl Music {
         }
     }
 
-    #[method(from = "music", info = "Update music.")]
+    #[method(from = "Music", info = "Update music.")]
     fn update(_: &mlua::Lua, this: &Self) -> mlua::Result<()> {
         unsafe {
             ffi::UpdateMusicStream(this.inner);
@@ -109,7 +109,7 @@ impl Music {
         }
     }
 
-    #[method(from = "music", info = "Play music.")]
+    #[method(from = "Music", info = "Play music.")]
     fn play(_: &mlua::Lua, this: &Self) -> mlua::Result<()> {
         unsafe {
             ffi::PlayMusicStream(this.inner);
@@ -117,7 +117,7 @@ impl Music {
         }
     }
 
-    #[method(from = "music", info = "Stop music.")]
+    #[method(from = "Music", info = "Stop music.")]
     fn stop(_: &mlua::Lua, this: &Self) -> mlua::Result<()> {
         unsafe {
             ffi::StopMusicStream(this.inner);
@@ -125,7 +125,7 @@ impl Music {
         }
     }
 
-    #[method(from = "music", info = "Pause music.")]
+    #[method(from = "Music", info = "Pause music.")]
     fn pause(_: &mlua::Lua, this: &Self) -> mlua::Result<()> {
         unsafe {
             ffi::PauseMusicStream(this.inner);
@@ -133,7 +133,7 @@ impl Music {
         }
     }
 
-    #[method(from = "music", info = "Resume music.")]
+    #[method(from = "Music", info = "Resume music.")]
     fn resume(_: &mlua::Lua, this: &Self) -> mlua::Result<()> {
         unsafe {
             ffi::ResumeMusicStream(this.inner);

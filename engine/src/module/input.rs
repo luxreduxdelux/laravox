@@ -186,7 +186,7 @@ mod board {
     #[function(
         from = "input.board",
         info = "Get the last key press.",
-        result(name = "code", info = "Key code. May be nil.", kind = "number")
+        result(name = "code", info = "Key code.", kind = "number", optional = true)
     )]
     pub fn get_last_press(_: &mlua::Lua, _: ()) -> mlua::Result<Option<i32>> {
         unsafe {
@@ -206,8 +206,9 @@ mod board {
         info = "Get the last key character press.",
         result(
             name = "character",
-            info = "Key character. May be nil.",
-            kind = "number"
+            info = "Key character.",
+            kind = "number",
+            optional = true
         )
     )]
     pub fn get_last_character(_: &mlua::Lua, _: ()) -> mlua::Result<Option<i32>> {
@@ -293,8 +294,9 @@ mod mouse {
         info = "Get the last mouse button press.",
         result(
             name = "code",
-            info = "Mouse button code. May be nil.",
-            kind = "number"
+            info = "Mouse button code.",
+            kind = "number",
+            optional = true
         )
     )]
     pub fn get_last_press(_: &mlua::Lua, _: ()) -> mlua::Result<Option<i32>> {
@@ -312,7 +314,7 @@ mod mouse {
     #[function(
         from = "input.mouse",
         info = "Get the point of the mouse cursor on-screen.",
-        result(name = "point", info = "Mouse cursor point.", kind = "vector_2")
+        result(name = "point", info = "Mouse cursor point.", kind = "Vector2")
     )]
     pub fn get_point(lua: &mlua::Lua, _: ()) -> mlua::Result<mlua::Value> {
         Ok(unsafe { lua.to_value(&Vector2::from(ffi::GetMousePosition()))? })
@@ -321,7 +323,7 @@ mod mouse {
     #[function(
         from = "input.mouse",
         info = "Get the delta of the mouse.",
-        result(name = "delta", info = "Mouse delta.", kind = "vector_2")
+        result(name = "delta", info = "Mouse delta.", kind = "Vector2")
     )]
     pub fn get_delta(lua: &mlua::Lua, _: ()) -> mlua::Result<mlua::Value> {
         Ok(unsafe { lua.to_value(&Vector2::from(ffi::GetMouseDelta()))? })
@@ -330,7 +332,7 @@ mod mouse {
     #[function(
         from = "input.mouse",
         info = "Set the point of the mouse cursor on-screen.",
-        parameter(name = "point", info = "Mouse cursor point.", kind = "vector_2")
+        parameter(name = "point", info = "Mouse cursor point.", kind = "Vector2")
     )]
     pub fn set_point(lua: &mlua::Lua, point: mlua::Value) -> mlua::Result<()> {
         unsafe {
@@ -343,7 +345,7 @@ mod mouse {
     #[function(
         from = "input.mouse",
         info = "Get the scroll wheel delta of the mouse.",
-        result(name = "delta", info = "Mouse wheel delta.", kind = "vector_2")
+        result(name = "delta", info = "Mouse wheel delta.", kind = "Vector2")
     )]
     pub fn get_wheel(lua: &mlua::Lua, _: ()) -> mlua::Result<mlua::Value> {
         Ok(unsafe { lua.to_value(&Vector2::from(ffi::GetMouseWheelMoveV()))? })
@@ -458,8 +460,9 @@ mod pad {
         parameter(name = "index", info = "Game-pad index.", kind = "number"),
         result(
             name = "code",
-            info = "Game-pad button code. May be nil.",
-            kind = "number"
+            info = "Game-pad button code.",
+            kind = "number",
+            optional = true
         )
     )]
     pub fn get_last_press(_: &mlua::Lua, index: i32) -> mlua::Result<Option<i32>> {

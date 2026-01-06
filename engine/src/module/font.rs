@@ -82,7 +82,7 @@ impl Font {
         info = "Create a new font resource.",
         parameter(name = "path", info = "Path to font.", kind = "string"),
         parameter(name = "scale", info = "Fotn scale.", kind = "number"),
-        result(name = "font", info = "Font resource.", kind(user_data(name = "font")))
+        result(name = "font", info = "Font resource.", kind(user_data(name = "Font")))
     )]
     fn new(
         lua: &mlua::Lua,
@@ -122,13 +122,13 @@ impl Font {
     }
 
     #[method(
-        from = "font",
+        from = "Font",
         info = "Draw text.",
         parameter(name = "text", info = "Text to draw.", kind = "string"),
-        parameter(name = "point", info = "Point of text to draw.", kind = "vector_2"),
+        parameter(name = "point", info = "Point of text to draw.", kind = "Vector2"),
         parameter(name = "scale", info = "Scale of text to draw.", kind = "number"),
         parameter(name = "space", info = "Space of text to draw.", kind = "number"),
-        parameter(name = "color", info = "Color of text to draw.", kind = "color")
+        parameter(name = "color", info = "Color of text to draw.", kind = "Color")
     )]
     fn draw(
         lua: &mlua::Lua,
@@ -153,17 +153,17 @@ impl Font {
 
     // Original code from: https://www.raylib.com/examples/text/loader.html?name=text_rectangle_bounds
     #[method(
-        from = "font",
+        from = "Font",
         info = "Draw text with text wrap.",
         parameter(name = "text", info = "Text to draw.", kind = "string"),
         parameter(
             name = "box_2",
             info = "Constraint area of text to draw.",
-            kind = "box_2"
+            kind = "Box2"
         ),
         parameter(name = "scale", info = "Scale of text to draw.", kind = "number"),
         parameter(name = "space", info = "Space of text to draw.", kind = "number"),
-        parameter(name = "color", info = "Color of text to draw.", kind = "color"),
+        parameter(name = "color", info = "Color of text to draw.", kind = "Color"),
         result(
             name = "shift",
             info = "Amount of vertical line shifting.",
@@ -309,12 +309,12 @@ impl Font {
     }
 
     #[method(
-        from = "font",
+        from = "Font",
         info = "Calculate the scale of text.",
         parameter(name = "text", info = "Text to evaluate.", kind = "string"),
         parameter(name = "scale", info = "Scale of text to evaluate.", kind = "number"),
         parameter(name = "space", info = "Space of text to evaluate.", kind = "number"),
-        result(name = "scale", info = "Scale of text.", kind = "vector_2")
+        result(name = "scale", info = "Scale of text.", kind = "Vector2")
     )]
     fn measure(
         lua: &mlua::Lua,
@@ -329,6 +329,163 @@ impl Font {
                 space,
             )))
         }
+    }
+
+    // Original code from: https://www.raylib.com/examples/text/loader.html?name=text_rectangle_bounds
+    #[method(
+        from = "Font",
+        info = "Calculate the scale of text, with text wrap.",
+        parameter(name = "text", info = "Text to evaluate.", kind = "string"),
+        parameter(
+            name = "box_2",
+            info = "Constraint area of text to draw.",
+            kind = "Box2"
+        ),
+        parameter(name = "scale", info = "Scale of text to evaluate.", kind = "number"),
+        parameter(name = "space", info = "Space of text to evaluate.", kind = "number"),
+        result(
+            name = "shift",
+            info = "Amount of vertical line shifting.",
+            kind = "number"
+        )
+    )]
+    fn measure_wrap(
+        lua: &mlua::Lua,
+        this: &Self,
+        (text, box_2, scale, space): (String, mlua::Value, f32, f32),
+    ) -> mlua::Result<f32> {
+        let box_2: Box2 = lua.from_value(box_2)?;
+
+        let length: i32 = text.len() as i32;
+        let text = std::ffi::CString::new(text).unwrap();
+        let text = text.as_ptr();
+
+        let mut text_shift_y: f32 = 0.0;
+        let mut text_shift_x: f32 = 0.0;
+
+        let scale_factor: f32 = scale / this.inner.baseSize as f32;
+
+        const MEASURE_STATE: i32 = 0;
+        const DRAW_STATE: i32 = 1;
+        let mut state: i32 = MEASURE_STATE;
+
+        let mut start_line: i32 = -1;
+        let mut end_line: i32 = -1;
+        let mut last_k: i32 = -1;
+
+        let mut i: i32 = 0;
+        let mut k: i32 = 0;
+
+        while i < length {
+            let mut code_point_byte_count: i32 = 0;
+            let codepoint: i32 =
+                unsafe { ffi::GetCodepoint(text.offset(i as isize), &mut code_point_byte_count) };
+
+            let index: i32 = unsafe { ffi::GetGlyphIndex(this.inner, codepoint) };
+
+            if codepoint == 0x3f {
+                code_point_byte_count = 1;
+            }
+
+            i += code_point_byte_count - 1;
+
+            let mut glyph_width: f32 = 0.0;
+
+            if codepoint != '\n' as i32 {
+                let glyph = unsafe { *this.inner.glyphs.offset(index as isize) };
+                let rec_glyph = unsafe { *this.inner.recs.offset(index as isize) };
+
+                glyph_width = if glyph.advanceX == 0 {
+                    rec_glyph.width * scale_factor
+                } else {
+                    glyph.advanceX as f32 * scale_factor
+                };
+
+                if i + 1 < length {
+                    glyph_width += space;
+                }
+            }
+
+            if state == MEASURE_STATE {
+                if codepoint == ' ' as i32 || codepoint == '\t' as i32 || codepoint == '\n' as i32 {
+                    end_line = i;
+                }
+
+                if text_shift_x + glyph_width > box_2.s_x {
+                    end_line = if end_line < 1 { i } else { end_line };
+
+                    if i == end_line {
+                        end_line -= code_point_byte_count;
+                    }
+
+                    if start_line + code_point_byte_count == end_line {
+                        end_line = i - code_point_byte_count;
+                    }
+
+                    state = DRAW_STATE;
+                } else if i + 1 == length {
+                    end_line = i;
+                    state = DRAW_STATE;
+                } else if codepoint == '\n' as i32 {
+                    state = DRAW_STATE;
+                }
+
+                if state == DRAW_STATE {
+                    text_shift_x = 0.0;
+                    i = start_line;
+                    glyph_width = 0.0;
+
+                    let tmp = last_k;
+                    last_k = k - 1;
+                    k = tmp;
+                }
+            } else {
+                if codepoint != '\n' as i32 {
+                    if text_shift_y + this.inner.baseSize as f32 * scale_factor > box_2.s_y {
+                        break;
+                    }
+
+                    /*
+                    if codepoint != ' ' as i32 && codepoint != '\t' as i32 {
+                        unsafe {
+                            ffi::DrawTextCodepoint(
+                                this.inner,
+                                codepoint,
+                                Vector2 {
+                                    x: box_2.p_x + text_shift_x,
+                                    y: box_2.p_y + text_shift_y,
+                                }
+                                .into(),
+                                scale,
+                                color.into(),
+                            );
+                        }
+                    }
+                    */
+                }
+
+                if i == end_line {
+                    // 2.0 is to roughly be in par with the default text line spacing
+                    text_shift_y += (this.inner.baseSize as f32 + 2.0) * scale_factor;
+                    text_shift_x = 0.0;
+                    start_line = end_line;
+                    end_line = -1;
+                    glyph_width = 0.0;
+                    k = last_k;
+
+                    state = MEASURE_STATE;
+                }
+            }
+
+            if text_shift_x != 0.0 || codepoint != ' ' as i32 {
+                text_shift_x += glyph_width;
+            }
+
+            i += 1;
+            k += 1;
+        }
+
+        Ok(text_shift_y)
     }
 }
 
@@ -353,6 +510,9 @@ impl mlua::UserData for Font {
         );
         method.add_method("measure", |lua, this, (text, scale, space)| {
             Self::measure(lua, this, (text, scale, space))
+        });
+        method.add_method("measure_wrap", |lua, this, (text, box_2, scale, space)| {
+            Self::measure_wrap(lua, this, (text, box_2, scale, space))
         });
     }
 }

@@ -89,7 +89,7 @@ impl Texture {
         result(
             name = "texture",
             info = "Texture resource.",
-            kind(user_data(name = "texture"))
+            kind(user_data(name = "Texture"))
         )
     )]
     fn new(_: &mlua::Lua, path: String) -> mlua::Result<Self> {
@@ -107,13 +107,13 @@ impl Texture {
     }
 
     #[method(
-        from = "texture",
+        from = "Texture",
         info = "Draw texture.",
-        parameter(name = "source", info = "Source of texture to draw.", kind = "box_2"),
-        parameter(name = "target", info = "Target of texture to draw.", kind = "box_2"),
-        parameter(name = "point", info = "Point of texture to draw.", kind = "vector_2"),
+        parameter(name = "source", info = "Source of texture to draw.", kind = "Box2"),
+        parameter(name = "target", info = "Target of texture to draw.", kind = "Box2"),
+        parameter(name = "point", info = "Point of texture to draw.", kind = "Vector2"),
         parameter(name = "angle", info = "Angle of texture to draw.", kind = "number"),
-        parameter(name = "color", info = "Color of texture to draw.", kind = "color")
+        parameter(name = "color", info = "Color of texture to draw.", kind = "Color")
     )]
     fn draw(
         lua: &mlua::Lua,
@@ -146,9 +146,9 @@ impl Texture {
     }
 
     #[method(
-        from = "texture",
+        from = "Texture",
         info = "Get texture scale.",
-        result(name = "scale", info = "Texture scale.", kind = "vector_2")
+        result(name = "scale", info = "Texture scale.", kind = "Vector2")
     )]
     fn get_scale(lua: &mlua::Lua, this: &Self) -> mlua::Result<mlua::Value> {
         lua.to_value(&Vector2::new(
@@ -177,7 +177,7 @@ impl mlua::UserData for Texture {
 
 //================================================================
 
-#[class(name = "texture_target", info = "Texture (render-target) class.")]
+#[class(info = "Texture (render-target) class.")]
 struct TextureTarget {
     inner: ffi::RenderTexture,
 }
@@ -189,12 +189,12 @@ impl TextureTarget {
         parameter(
             name = "scale",
             info = "Render-target texture scale.",
-            kind = "vector_2"
+            kind = "Vector2"
         ),
         result(
             name = "texture_target",
             info = "Render-target texture resource.",
-            kind(user_data(name = "texture_target"))
+            kind(user_data(name = "TextureTarget"))
         )
     )]
     fn new(lua: &mlua::Lua, scale: mlua::Value) -> mlua::Result<Self> {
@@ -213,7 +213,7 @@ impl TextureTarget {
     }
 
     #[method(
-        from = "texture_target",
+        from = "TextureTarget",
         info = "Initialize a draw session.",
         parameter(name = "call", info = "Draw function.", kind = "function")
     )]
@@ -228,13 +228,13 @@ impl TextureTarget {
     }
 
     #[method(
-        from = "texture_target",
+        from = "TextureTarget",
         info = "Draw texture.",
-        parameter(name = "source", info = "Source of texture to draw.", kind = "box_2"),
-        parameter(name = "target", info = "Target of texture to draw.", kind = "box_2"),
-        parameter(name = "point", info = "Point of texture to draw.", kind = "vector_2"),
+        parameter(name = "source", info = "Source of texture to draw.", kind = "Box2"),
+        parameter(name = "target", info = "Target of texture to draw.", kind = "Box2"),
+        parameter(name = "point", info = "Point of texture to draw.", kind = "Vector2"),
         parameter(name = "angle", info = "Angle of texture to draw.", kind = "number"),
-        parameter(name = "color", info = "Color of texture to draw.", kind = "color")
+        parameter(name = "color", info = "Color of texture to draw.", kind = "Color")
     )]
     fn draw(
         lua: &mlua::Lua,
@@ -269,9 +269,9 @@ impl TextureTarget {
     }
 
     #[method(
-        from = "texture_target",
+        from = "TextureTarget",
         info = "Get texture scale.",
-        result(name = "scale", info = "Texture scale.", kind = "vector_2")
+        result(name = "scale", info = "Texture scale.", kind = "Vector2")
     )]
     fn get_scale(lua: &mlua::Lua, this: &Self) -> mlua::Result<mlua::Value> {
         lua.to_value(&Vector2::new(

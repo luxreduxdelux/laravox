@@ -53,31 +53,6 @@ const META_HEADER: &str = r#"---@meta
 ---@class laravox
 laravox = {}
 
----@class vector_2
----@field x number
----@field y number
-vector_2 = {}
-
----@class vector_3
----@field x number
----@field y number
----@field z number
-vector_3 = {}
-
----@class box_2
----@field x number
----@field y number
----@field width number
----@field height number
-box_2 = {}
-
----@class color
----@field r number
----@field g number
----@field b number
----@field a number
-color = {}
-
 "#;
 const META_FILE: &str = "meta.lua";
 const META_PATH: &str = "../engine_macro/out";

@@ -64,10 +64,12 @@ pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
 
     data.set("get_file_exist", lua.create_function(self::get_file_exist)?)?;
     data.set("get_file_list",  lua.create_function(self::get_file_list)?)?;
+    data.set("is_file",        lua.create_function(self::is_file)?)?;
     data.set("get_file",       lua.create_function(self::get_file)?)?;
     data.set("set_file",       lua.create_function(self::set_file)?)?;
     data.set("serialize",      lua.create_function(self::serialize)?)?;
     data.set("deserialize",    lua.create_function(self::deserialize)?)?;
+    data.set("system_version", lua.create_function(self::system_version)?)?;
 
     global.set("data", data)?;
 
@@ -92,6 +94,7 @@ fn get_file_list_aux(list: &mut Vec<String>, path: String, recurse: bool) -> any
     for file in file_path {
         let file = file?;
         let path = file.path().display().to_string();
+
         list.push(path.clone());
 
         if recurse && file.file_type()?.is_dir() {
@@ -118,6 +121,20 @@ fn get_file_list(_: &mlua::Lua, (path, recurse): (String, bool)) -> mlua::Result
     get_file_list_aux(&mut list, path, recurse)?;
 
     Ok(list)
+}
+
+#[function(
+    from = "data",
+    info = "Check if a path is a file.",
+    parameter(name = "path", info = "Path to file.", kind = "string"),
+    result(
+        name = "file",
+        info = "True if path is file, false otherwise.",
+        kind = "boolean"
+    )
+)]
+fn is_file(_: &mlua::Lua, path: String) -> mlua::Result<bool> {
+    Ok(std::path::Path::new(&path).is_file())
 }
 
 #[function(
@@ -179,4 +196,13 @@ fn deserialize(lua: &mlua::Lua, data: String) -> mlua::Result<mlua::Value> {
         Ok(value) => lua.to_value(&value),
         Err(error) => Err(mlua::Error::runtime(error.to_string())),
     }
+}
+
+#[function(
+    from = "data",
+    info = "Get the current operating system.",
+    result(name = "system", info = "System string.", kind = "string")
+)]
+fn system_version(_: &mlua::Lua, _: ()) -> mlua::Result<String> {
+    Ok(std::env::consts::OS.to_string())
 }

@@ -72,10 +72,12 @@ struct Context {
 
 #[derive(Deserialize)]
 struct ContextInfo {
-    title: String,
+    icon: Option<String>,
+    name: Option<String>,
     scale: (i32, i32),
     sync: bool,
     full: bool,
+    log: bool,
 }
 
 impl Context {
@@ -96,12 +98,22 @@ impl Context {
             ffi::SetConfigFlags(flag);
         }
 
-        let (handle, thread) = raylib::init()
+        let (mut handle, thread) = raylib::init()
             .size(info.scale.0, info.scale.1)
-            .title(&info.title)
+            .title(&info.name.unwrap_or("Laravox".to_string()))
             .resizable()
-            .log_level(TraceLogLevel::LOG_NONE)
+            .log_level(if info.log {
+                TraceLogLevel::LOG_ALL
+            } else {
+                TraceLogLevel::LOG_NONE
+            })
             .build();
+
+        handle.set_exit_key(None);
+
+        if let Some(icon) = &info.icon {
+            handle.set_window_icon(Image::load_image(icon)?);
+        }
 
         let audio = raylib::audio::RaylibAudio::init_audio_device()?;
 
@@ -139,7 +151,7 @@ impl Script {
     const HOOK_NAME: &str = "laravox";
 
     fn new(set_window_global: bool) -> anyhow::Result<Self> {
-        let lua = Lua::new();
+        let lua = unsafe { Lua::unsafe_new() };
 
         let table: mlua::Table = lua
             .load(format!("require(\"{}\")", Self::MAIN_PATH))
@@ -178,13 +190,13 @@ impl Script {
         };
 
         if window {
-            crate::module::font::set_global(&self.lua, &global)?;
-            crate::module::input::set_global(&self.lua, &global)?;
-            crate::module::music::set_global(&self.lua, &global)?;
-            crate::module::screen::set_global(&self.lua, &global)?;
-            crate::module::sound::set_global(&self.lua, &global)?;
-            crate::module::texture::set_global(&self.lua, &global)?;
             crate::module::window::set_global(&self.lua, &global)?;
+            crate::module::screen::set_global(&self.lua, &global)?;
+            crate::module::texture::set_global(&self.lua, &global)?;
+            crate::module::font::set_global(&self.lua, &global)?;
+            crate::module::sound::set_global(&self.lua, &global)?;
+            crate::module::music::set_global(&self.lua, &global)?;
+            crate::module::input::set_global(&self.lua, &global)?;
         } else {
             crate::module::data::set_global(&self.lua, &global)?;
             crate::module::network::set_global(&self.lua, &global)?;
@@ -196,15 +208,20 @@ impl Script {
                         if debug {
                             let format = format!("{value:#?}");
                             println!("{format}");
-                            return Ok(Some(format));
+                            return Ok(());
                         } else if let Ok(value) = value.to_string() {
                             println!("{value}");
                         } else {
                             println!("{value:#?}");
                         }
 
-                        Ok(None)
+                        Ok(())
                     })?,
+            )?;
+            self.lua.globals().set(
+                "format",
+                self.lua
+                    .create_function(|_, value: mlua::Value| Ok(format!("{value:#?}")))?,
             )?;
         }
 

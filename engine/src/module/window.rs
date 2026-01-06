@@ -115,8 +115,9 @@ fn toggle_full_screen(_: &mlua::Lua, _: ()) -> mlua::Result<()> {
     info = "Set the exit key.",
     parameter(
         name = "code",
-        info = "Exit key. If nil, the exit key will be made null.",
-        kind = "number"
+        info = "Exit key. If nil, no key will cause the window's exit state to enable.",
+        kind = "number",
+        optional = true
     )
 )]
 fn set_exit_key(_: &mlua::Lua, code: Option<i32>) -> mlua::Result<()> {
@@ -133,7 +134,7 @@ fn set_exit_key(_: &mlua::Lua, code: Option<i32>) -> mlua::Result<()> {
 #[function(
     from = "window",
     info = "Get the current screen scale.",
-    result(name = "scale", info = "Screen scale.", kind = "vector_2")
+    result(name = "scale", info = "Screen scale.", kind = "Vector2")
 )]
 fn get_screen_scale(lua: &mlua::Lua, _: ()) -> mlua::Result<mlua::Value> {
     unsafe {
@@ -148,7 +149,7 @@ fn get_screen_scale(lua: &mlua::Lua, _: ()) -> mlua::Result<mlua::Value> {
 #[function(
     from = "window",
     info = "Get the current window scale.",
-    result(name = "scale", info = "Window scale.", kind = "vector_2")
+    result(name = "scale", info = "Window scale.", kind = "Vector2")
 )]
 fn get_window_scale(lua: &mlua::Lua, _: ()) -> mlua::Result<mlua::Value> {
     unsafe {
@@ -162,7 +163,7 @@ fn get_window_scale(lua: &mlua::Lua, _: ()) -> mlua::Result<mlua::Value> {
 #[function(
     from = "window",
     info = "Set the current window scale.",
-    parameter(name = "scale", info = "Window scale.", kind = "vector_2")
+    parameter(name = "scale", info = "Window scale.", kind = "Vector2")
 )]
 fn set_window_scale(lua: &mlua::Lua, scale: mlua::Value) -> mlua::Result<()> {
     unsafe {
@@ -175,7 +176,7 @@ fn set_window_scale(lua: &mlua::Lua, scale: mlua::Value) -> mlua::Result<()> {
 #[function(
     from = "window",
     info = "Get the current render scale.",
-    result(name = "scale", info = "Render state.", kind = "vector_2")
+    result(name = "scale", info = "Render state.", kind = "Vector2")
 )]
 fn get_render_scale(lua: &mlua::Lua, _: ()) -> mlua::Result<mlua::Value> {
     unsafe {
