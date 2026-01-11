@@ -56,6 +56,7 @@ use mimalloc::MiMalloc;
 use mlua::prelude::*;
 use raylib::prelude::*;
 use serde::Deserialize;
+use std::io::Read;
 
 // TO-DO not sure if this actually does impact Lua at all
 #[global_allocator]
@@ -77,6 +78,7 @@ struct ContextInfo {
     scale: (i32, i32),
     sync: bool,
     full: bool,
+    rate: u32,
     log: bool,
 }
 
@@ -110,6 +112,7 @@ impl Context {
             .build();
 
         handle.set_exit_key(None);
+        handle.set_target_fps(info.rate);
 
         if let Some(icon) = &info.icon {
             handle.set_window_icon(Image::load_image(icon)?);
@@ -145,6 +148,7 @@ struct Script {
 
 impl Script {
     const MAIN_PATH: &str = "main/main";
+    const MAIN_FILE: &str = "main";
     const ENTRY_INFO: &str = "info";
     const ENTRY_MAIN: &str = "main";
     const ENTRY_FAIL: &str = "fail";
@@ -152,6 +156,33 @@ impl Script {
 
     fn new(set_window_global: bool) -> anyhow::Result<Self> {
         let lua = unsafe { Lua::unsafe_new() };
+
+        let main = std::path::Path::new(Self::MAIN_FILE);
+
+        if main.is_file() {
+            let global = lua.globals();
+            let loader = global.get::<mlua::Table>("package")?;
+            let loader = loader.get::<mlua::Table>("loaders")?;
+
+            let file = std::fs::File::open(Self::MAIN_FILE)?;
+            let mut file = zip::ZipArchive::new(file)?;
+
+            loader.push(lua.create_function_mut(move |lua, path: String| {
+                let token: Vec<&str> = path.split(&format!("{}/", Self::MAIN_FILE)).collect();
+
+                if let Some(path) = token.get(1)
+                    && let Ok(mut entry) = file.by_name(&format!("{path}.lua"))
+                {
+                    let mut buffer = String::new();
+                    entry.read_to_string(&mut buffer)?;
+                    return Ok(lua.load(buffer).into_function());
+                }
+
+                Err(mlua::Error::runtime(format!(
+                    "No module \"{path}\" found in the \"main\" ZIP archive."
+                )))
+            })?)?;
+        }
 
         let table: mlua::Table = lua
             .load(format!("require(\"{}\")", Self::MAIN_PATH))
@@ -199,6 +230,7 @@ impl Script {
             crate::module::input::set_global(&self.lua, &global)?;
         } else {
             crate::module::data::set_global(&self.lua, &global)?;
+            crate::module::archive::set_global(&self.lua, &global)?;
             crate::module::network::set_global(&self.lua, &global)?;
 
             self.lua.globals().set(

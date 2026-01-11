@@ -118,6 +118,7 @@ impl Server {
             kind = "number"
         ),
         parameter(name = "port", info = "Address port.", kind = "number"),
+        parameter(name = "client_count", info = "Maximum client count.", kind = "number"),
         result(
             name = "server",
             info = "Server resource.",
@@ -126,23 +127,27 @@ impl Server {
     )]
     fn new_server(
         _: &mlua::Lua,
-        (address_a, address_b, address_c, address_d, port): (u8, u8, u8, u8, u16),
+        (address_a, address_b, address_c, address_d, port, client_count): (
+            u8,
+            u8,
+            u8,
+            u8,
+            u16,
+            usize,
+        ),
     ) -> mlua::Result<Self> {
         let server = RenetServer::new(ConnectionConfig::default());
-
         let address = SocketAddr::new(
             IpAddr::V4(Ipv4Addr::new(address_a, address_b, address_c, address_d)),
             port,
         );
-
-        println!("add: {address:?}");
 
         let socket: UdpSocket = UdpSocket::bind(address)?;
         let server_config = ServerConfig {
             current_time: SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap(),
-            max_clients: 4,
+            max_clients: client_count,
             protocol_id: 0,
             public_addresses: vec![address],
             authentication: ServerAuthentication::Unsecure,

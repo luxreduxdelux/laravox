@@ -48,6 +48,7 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+use crate::module::archive::*;
 use crate::module::general::*;
 use engine_macro::*;
 
@@ -58,11 +59,13 @@ use raylib::prelude::*;
 
 //================================================================
 
+#[rustfmt::skip]
 #[module(name = "font", info = "Font API.")]
 pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
     let font = lua.create_table()?;
 
-    font.set("new", lua.create_function(self::Font::new)?)?;
+    font.set("new",         lua.create_function(self::Font::new)?)?;
+    font.set("new_archive", lua.create_function(self::Font::new_archive)?)?;
 
     global.set("font", font)?;
 
@@ -79,9 +82,15 @@ struct Font {
 impl Font {
     #[function(
         from = "font",
-        info = "Create a new font resource.",
+        info = "Create a new Font resource.",
         parameter(name = "path", info = "Path to font.", kind = "string"),
-        parameter(name = "scale", info = "Fotn scale.", kind = "number"),
+        parameter(name = "scale", info = "Font scale.", kind = "number"),
+        parameter(
+            name = "range",
+            info = "Font code-point range.",
+            kind = "number",
+            optional = true
+        ),
         result(name = "font", info = "Font resource.", kind(user_data(name = "Font")))
     )]
     fn new(
@@ -110,6 +119,74 @@ impl Font {
 
             let inner =
                 ffi::LoadFontEx(c_string(&path).as_ptr(), scale, pointer, range.len() as i32);
+
+            if ffi::IsFontValid(inner) {
+                Ok(Self { inner })
+            } else {
+                Err(mlua::Error::runtime(format!(
+                    "font.new(): Error loading font \"{path}\"."
+                )))
+            }
+        }
+    }
+
+    #[function(
+        from = "font",
+        info = "Create a new Font resource from an archive.",
+        parameter(name = "path", info = "Path to font.", kind = "string"),
+        parameter(
+            name = "archive",
+            info = "Archive to load the asset from.",
+            kind(user_data(name = "Archive"))
+        ),
+        parameter(name = "scale", info = "Font scale.", kind = "number"),
+        parameter(
+            name = "range",
+            info = "Font code-point range.",
+            kind = "number",
+            optional = true
+        ),
+        result(name = "font", info = "Font resource.", kind(user_data(name = "Font")))
+    )]
+    fn new_archive(
+        lua: &mlua::Lua,
+        (path, archive, scale, code_point_range): (
+            String,
+            mlua::AnyUserData,
+            i32,
+            Option<mlua::Value>,
+        ),
+    ) -> mlua::Result<Self> {
+        let (data, extension) = Archive::borrow_file(&path, archive)?;
+
+        unsafe {
+            let mut range = Vec::new();
+
+            if let Some(code_point_range) = code_point_range {
+                let code_point_range: Vec<(i32, i32)> = lua.from_value(code_point_range)?;
+
+                for i in code_point_range {
+                    let current_range = i.0..=i.1;
+                    let current_range: Vec<i32> = current_range.collect();
+
+                    range.extend(current_range);
+                }
+            };
+
+            let pointer = if range.is_empty() {
+                std::ptr::null_mut()
+            } else {
+                range.as_mut_ptr()
+            };
+
+            let inner = ffi::LoadFontFromMemory(
+                c_string(&extension).as_ptr(),
+                data.as_ptr(),
+                data.len() as i32,
+                scale,
+                pointer,
+                range.len() as i32,
+            );
 
             if ffi::IsFontValid(inner) {
                 Ok(Self { inner })
@@ -440,10 +517,10 @@ impl Font {
                     k = tmp;
                 }
             } else {
-                if codepoint != '\n' as i32 {
-                    if text_shift_y + this.inner.baseSize as f32 * scale_factor > box_2.s_y {
-                        break;
-                    }
+                if codepoint != '\n' as i32
+                    && text_shift_y + this.inner.baseSize as f32 * scale_factor > box_2.s_y
+                {
+                    break;
 
                     /*
                     if codepoint != ' ' as i32 && codepoint != '\t' as i32 {
@@ -498,21 +575,11 @@ impl Drop for Font {
 }
 
 impl mlua::UserData for Font {
+    #[rustfmt::skip]
     fn add_methods<M: mlua::UserDataMethods<Self>>(method: &mut M) {
-        method.add_method("draw", |lua, this, (text, point, scale, space, color)| {
-            Self::draw(lua, this, (text, point, scale, space, color))
-        });
-        method.add_method(
-            "draw_wrap",
-            |lua, this, (text, box_2, scale, space, color)| {
-                Self::draw_wrap(lua, this, (text, box_2, scale, space, color))
-            },
-        );
-        method.add_method("measure", |lua, this, (text, scale, space)| {
-            Self::measure(lua, this, (text, scale, space))
-        });
-        method.add_method("measure_wrap", |lua, this, (text, box_2, scale, space)| {
-            Self::measure_wrap(lua, this, (text, box_2, scale, space))
-        });
+        method.add_method("draw",         Self::draw);
+        method.add_method("draw_wrap",    Self::draw_wrap);
+        method.add_method("measure",      Self::measure);
+        method.add_method("measure_wrap", Self::measure_wrap);
     }
 }

@@ -62,14 +62,13 @@ use serde_json::Value;
 pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
     let data = lua.create_table()?;
 
-    data.set("get_file_exist", lua.create_function(self::get_file_exist)?)?;
-    data.set("get_file_list",  lua.create_function(self::get_file_list)?)?;
-    data.set("is_file",        lua.create_function(self::is_file)?)?;
-    data.set("get_file",       lua.create_function(self::get_file)?)?;
-    data.set("set_file",       lua.create_function(self::set_file)?)?;
-    data.set("serialize",      lua.create_function(self::serialize)?)?;
-    data.set("deserialize",    lua.create_function(self::deserialize)?)?;
-    data.set("system_version", lua.create_function(self::system_version)?)?;
+    data.set("get_list",    lua.create_function(self::get_list)?)?;
+    data.set("get_file",    lua.create_function(self::get_file)?)?;
+    data.set("set_file",    lua.create_function(self::set_file)?)?;
+    data.set("get_kind",    lua.create_function(self::get_kind)?)?;
+    data.set("into_string", lua.create_function(self::into_string)?)?;
+    data.set("from_string", lua.create_function(self::from_string)?)?;
+    data.set("get_system",  lua.create_function(self::get_system)?)?;
 
     global.set("data", data)?;
 
@@ -77,33 +76,6 @@ pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
 }
 
 //================================================================
-
-#[function(
-    from = "data",
-    info = "Check if a file does exist in disk.",
-    parameter(name = "path", info = "Path to file.", kind = "string"),
-    result(name = "exist", info = "True if file does exist.", kind = "boolean")
-)]
-fn get_file_exist(_: &mlua::Lua, path: String) -> mlua::Result<bool> {
-    Ok(std::fs::exists(path)?)
-}
-
-fn get_file_list_aux(list: &mut Vec<String>, path: String, recurse: bool) -> anyhow::Result<()> {
-    let file_path = std::fs::read_dir(path)?;
-
-    for file in file_path {
-        let file = file?;
-        let path = file.path().display().to_string();
-
-        list.push(path.clone());
-
-        if recurse && file.file_type()?.is_dir() {
-            get_file_list_aux(list, path, recurse)?;
-        }
-    }
-
-    Ok(())
-}
 
 #[function(
     from = "data",
@@ -116,35 +88,51 @@ fn get_file_list_aux(list: &mut Vec<String>, path: String, recurse: bool) -> any
         kind = "table"
     )
 )]
-fn get_file_list(_: &mlua::Lua, (path, recurse): (String, bool)) -> mlua::Result<Vec<String>> {
+fn get_list(_: &mlua::Lua, (path, recurse): (String, bool)) -> mlua::Result<Vec<String>> {
     let mut list = Vec::new();
-    get_file_list_aux(&mut list, path, recurse)?;
+    get_list_aux(&mut list, path, recurse)?;
 
     Ok(list)
 }
 
-#[function(
-    from = "data",
-    info = "Check if a path is a file.",
-    parameter(name = "path", info = "Path to file.", kind = "string"),
-    result(
-        name = "file",
-        info = "True if path is file, false otherwise.",
-        kind = "boolean"
-    )
-)]
-fn is_file(_: &mlua::Lua, path: String) -> mlua::Result<bool> {
-    Ok(std::path::Path::new(&path).is_file())
+fn get_list_aux(list: &mut Vec<String>, path: String, recurse: bool) -> anyhow::Result<()> {
+    let file_path = std::fs::read_dir(path)?;
+
+    for file in file_path {
+        let file = file?;
+        let path = file.path().display().to_string();
+
+        list.push(path.clone());
+
+        if recurse && file.file_type()?.is_dir() {
+            get_list_aux(list, path, recurse)?;
+        }
+    }
+
+    Ok(())
 }
 
 #[function(
     from = "data",
     info = "Get the data of a file.",
     parameter(name = "path", info = "Path to file.", kind = "string"),
-    result(name = "data", info = "File data.", kind = "string")
+    parameter(
+        name = "binary",
+        info = "Return the value as binary, or as a string.",
+        kind = "boolean"
+    ),
+    result(
+        name = "data",
+        info = "File data.",
+        kind(user_data(name = "table|string"))
+    )
 )]
-fn get_file(_: &mlua::Lua, path: String) -> mlua::Result<String> {
-    Ok(std::fs::read_to_string(path)?)
+fn get_file(lua: &mlua::Lua, (path, binary): (String, bool)) -> mlua::Result<mlua::Value> {
+    if binary {
+        Ok(lua.to_value(&std::fs::read(path)?)?)
+    } else {
+        Ok(lua.to_value(&std::fs::read_to_string(path)?)?)
+    }
 }
 
 #[function(
@@ -159,6 +147,33 @@ fn set_file(_: &mlua::Lua, (path, data): (String, String)) -> mlua::Result<()> {
 
 #[function(
     from = "data",
+    info = "Check the kind of a path.",
+    parameter(name = "path", info = "Path.", kind = "string"),
+    result(
+        name = "kind",
+        info = "Path kind.",
+        kind(user_data(name = "PathKind")),
+        optional = true
+    )
+)]
+fn get_kind(_: &mlua::Lua, path: String) -> mlua::Result<Option<usize>> {
+    let path = std::path::Path::new(&path);
+
+    if path.exists() {
+        if path.is_file() {
+            return Ok(Some(0));
+        } else if path.is_dir() {
+            return Ok(Some(1));
+        } else if path.is_symlink() {
+            return Ok(Some(2));
+        }
+    }
+
+    Ok(None)
+}
+
+#[function(
+    from = "data",
     info = "Serialize a Lua table as a string.",
     parameter(
         name = "data",
@@ -166,9 +181,9 @@ fn set_file(_: &mlua::Lua, (path, data): (String, String)) -> mlua::Result<()> {
         kind = "table"
     ),
     parameter(name = "pretty", info = "Pretty serialization.", kind = "boolean"),
-    result(name = "data", info = "Serialized string.", kind = "string")
+    result(name = "data", info = "Table as a string.", kind = "string")
 )]
-fn serialize(_: &mlua::Lua, (data, pretty): (mlua::Value, bool)) -> mlua::Result<String> {
+fn into_string(_: &mlua::Lua, (data, pretty): (mlua::Value, bool)) -> mlua::Result<String> {
     let string = if pretty {
         serde_json::to_string_pretty(&data)
     } else {
@@ -189,9 +204,9 @@ fn serialize(_: &mlua::Lua, (data, pretty): (mlua::Value, bool)) -> mlua::Result
         info = "String to deserialize as a table.",
         kind = "string"
     ),
-    result(name = "data", info = "Deserialized table.", kind = "table")
+    result(name = "data", info = "String as a table.", kind = "table")
 )]
-fn deserialize(lua: &mlua::Lua, data: String) -> mlua::Result<mlua::Value> {
+fn from_string(lua: &mlua::Lua, data: String) -> mlua::Result<mlua::Value> {
     match serde_json::from_str::<Value>(&data) {
         Ok(value) => lua.to_value(&value),
         Err(error) => Err(mlua::Error::runtime(error.to_string())),
@@ -200,9 +215,21 @@ fn deserialize(lua: &mlua::Lua, data: String) -> mlua::Result<mlua::Value> {
 
 #[function(
     from = "data",
-    info = "Get the current operating system.",
-    result(name = "system", info = "System string.", kind = "string")
+    info = "Get the current OS kind.",
+    result(
+        name = "system",
+        info = "System kind.",
+        kind(user_data(name = "SystemKind"))
+    )
 )]
-fn system_version(_: &mlua::Lua, _: ()) -> mlua::Result<String> {
-    Ok(std::env::consts::OS.to_string())
+#[rustfmt::skip]
+fn get_system(_: &mlua::Lua, _: ()) -> mlua::Result<usize> {
+    match std::env::consts::OS {
+        "linux"   => Ok(0),
+        "windows" => Ok(1),
+        "mac"     => Ok(2),
+        "android" => Ok(3),
+        "ios"     => Ok(4),
+        _         => Ok(5),
+    }
 }

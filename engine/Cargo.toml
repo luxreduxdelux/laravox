@@ -17,5 +17,5 @@ renet_netcode = { version = "1.2.0"  }
 rfd           = { version = "0.16.0" }
 #smol          = { version = "2.0.2"  }
 #smol-macros   = { version = "0.1.1"  }
-#zip           = { version = "7.0.0"  }
+zip           = { version = "7.0.0"  }
 engine_macro  = { path = "../engine_macro" }

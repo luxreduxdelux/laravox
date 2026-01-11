@@ -48,6 +48,7 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+use crate::module::archive::*;
 use crate::module::general::*;
 use engine_macro::*;
 
@@ -65,8 +66,9 @@ pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
     let texture        = lua.create_table()?;
     let texture_target = lua.create_table()?;
 
-    texture.set("new",        lua.create_function(self::Texture::new)?)?;
-    texture_target.set("new", lua.create_function(self::TextureTarget::new)?)?;
+    texture.set("new",         lua.create_function(self::Texture::new)?)?;
+    texture.set("new_archive", lua.create_function(self::Texture::new_archive)?)?;
+    texture_target.set("new",  lua.create_function(self::TextureTarget::new)?)?;
 
     global.set("texture",        texture)?;
     global.set("texture_target", texture_target)?;
@@ -101,6 +103,45 @@ impl Texture {
             } else {
                 Err(mlua::Error::runtime(format!(
                     "texture.new(): Error loading texture \"{path}\"."
+                )))
+            }
+        }
+    }
+
+    #[function(
+        from = "texture",
+        info = "Create a new Texture resource from an archive.",
+        parameter(name = "path", info = "Path to texture.", kind = "string"),
+        parameter(
+            name = "archive",
+            info = "Archive to load the asset from.",
+            kind(user_data(name = "Archive"))
+        ),
+        result(
+            name = "texture",
+            info = "Texture resource.",
+            kind(user_data(name = "Texture"))
+        )
+    )]
+    fn new_archive(
+        _: &mlua::Lua,
+        (path, archive): (String, mlua::AnyUserData),
+    ) -> mlua::Result<Self> {
+        let (data, extension) = Archive::borrow_file(&path, archive)?;
+
+        unsafe {
+            let inner = ffi::LoadImageFromMemory(
+                c_string(&extension).as_ptr(),
+                data.as_ptr(),
+                data.len() as i32,
+            );
+            let inner = ffi::LoadTextureFromImage(inner);
+
+            if ffi::IsTextureValid(inner) {
+                Ok(Self { inner })
+            } else {
+                Err(mlua::Error::runtime(format!(
+                    "texture.new_archive(): Error loading texture \"{path}\"."
                 )))
             }
         }
@@ -150,7 +191,7 @@ impl Texture {
         info = "Get texture scale.",
         result(name = "scale", info = "Texture scale.", kind = "Vector2")
     )]
-    fn get_scale(lua: &mlua::Lua, this: &Self) -> mlua::Result<mlua::Value> {
+    fn get_scale(lua: &mlua::Lua, this: &Self, _: ()) -> mlua::Result<mlua::Value> {
         lua.to_value(&Vector2::new(
             this.inner.width as f32,
             this.inner.height as f32,
@@ -167,11 +208,10 @@ impl Drop for Texture {
 }
 
 impl mlua::UserData for Texture {
+    #[rustfmt::skip]
     fn add_methods<M: mlua::UserDataMethods<Self>>(method: &mut M) {
-        method.add_method("draw", |lua, this, (text, point, scale, space, color)| {
-            Self::draw(lua, this, (text, point, scale, space, color))
-        });
-        method.add_method("get_scale", |lua, this, _: ()| Self::get_scale(lua, this));
+        method.add_method("draw",      Self::draw);
+        method.add_method("get_scale", Self::get_scale);
     }
 }
 
@@ -273,7 +313,7 @@ impl TextureTarget {
         info = "Get texture scale.",
         result(name = "scale", info = "Texture scale.", kind = "Vector2")
     )]
-    fn get_scale(lua: &mlua::Lua, this: &Self) -> mlua::Result<mlua::Value> {
+    fn get_scale(lua: &mlua::Lua, this: &Self, _: ()) -> mlua::Result<mlua::Value> {
         lua.to_value(&Vector2::new(
             this.inner.texture.width as f32,
             this.inner.texture.height as f32,
@@ -290,11 +330,10 @@ impl Drop for TextureTarget {
 }
 
 impl mlua::UserData for TextureTarget {
+    #[rustfmt::skip]
     fn add_methods<M: mlua::UserDataMethods<Self>>(method: &mut M) {
-        method.add_method("begin", Self::begin);
-        method.add_method("draw", |lua, this, (text, point, scale, space, color)| {
-            Self::draw(lua, this, (text, point, scale, space, color))
-        });
-        method.add_method("get_scale", |lua, this, _: ()| Self::get_scale(lua, this));
+        method.add_method("begin",     Self::begin);
+        method.add_method("draw",      Self::draw);
+        method.add_method("get_scale", Self::get_scale);
     }
 }
