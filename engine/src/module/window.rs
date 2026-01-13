@@ -1,53 +1,3 @@
-/*
-* Copyright (c) 2025 luxreduxdelux
-*
-* Redistribution and use in source and binary forms, with or without
-* modification, are permitted provided that the following conditions are met:
-*
-* 1. Redistributions of source code must retain the above copyright notice,
-* this list of conditions and the following disclaimer.
-*
-* 2. Redistributions in binary form must reproduce the above copyright notice,
-* this list of conditions and the following disclaimer in the documentation
-* and/or other materials provided with the distribution.
-*
-* Subject to the terms and conditions of this license, each copyright holder
-* and contributor hereby grants to those receiving rights under this license
-* a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable
-* (except for failure to satisfy the conditions of this license) patent license
-* to make, have made, use, offer to sell, sell, import, and otherwise transfer
-* this software, where such license applies only to those patent claims, already
-* acquired or hereafter acquired, licensable by such copyright holder or
-* contributor that are necessarily infringed by:
-*
-* (a) their Contribution(s) (the licensed copyrights of copyright holders and
-* non-copyrightable additions of contributors, in source or binary form) alone;
-* or
-*
-* (b) combination of their Contribution(s) with the work of authorship to which
-* such Contribution(s) was added by such copyright holder or contributor, if,
-* at the time the Contribution is added, such addition causes such combination
-* to be necessarily infringed. The patent license shall not apply to any other
-* combinations which include the Contribution.
-*
-* Except as expressly stated above, no rights or licenses from any copyright
-* holder or contributor is granted under this license, whether expressly, by
-* implication, estoppel or otherwise.
-*
-* DISCLAIMER
-*
-* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE
-* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-* SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-* OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
-
 use engine_macro::*;
 
 //================================================================
@@ -62,20 +12,23 @@ use raylib::prelude::*;
 pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
     let window = lua.create_table()?;
 
-    window.set("get_exit",            lua.create_function(self::get_exit)?)?;
-    window.set("get_full_screen",     lua.create_function(self::get_full_screen)?)?;
-    window.set("toggle_full_screen",  lua.create_function(self::toggle_full_screen)?)?;
-    window.set("set_exit_key",        lua.create_function(self::set_exit_key)?)?;
-    window.set("get_screen_scale",    lua.create_function(self::get_screen_scale)?)?;
-    window.set("get_window_scale",    lua.create_function(self::get_window_scale)?)?;
-    window.set("set_window_scale",    lua.create_function(self::set_window_scale)?)?;
-    window.set("get_render_scale",    lua.create_function(self::get_render_scale)?)?;
-    window.set("set_frame_rate",      lua.create_function(self::set_frame_rate)?)?;
-    window.set("get_frame_time",      lua.create_function(self::get_frame_time)?)?;
-    window.set("get_time",            lua.create_function(self::get_time)?)?;
-    window.set("get_frame_rate",      lua.create_function(self::get_frame_rate)?)?;
-    window.set("get_focus",           lua.create_function(self::get_focus)?)?;
-    window.set("get_resize",          lua.create_function(self::get_resize)?)?;
+    window.set("get_exit",           lua.create_function(self::get_exit)?)?;
+    window.set("get_full_screen",    lua.create_function(self::get_full_screen)?)?;
+    window.set("toggle_full_screen", lua.create_function(self::toggle_full_screen)?)?;
+    window.set("set_exit_key",       lua.create_function(self::set_exit_key)?)?;
+    window.set("get_screen_scale",   lua.create_function(self::get_screen_scale)?)?;
+    window.set("get_window_scale",   lua.create_function(self::get_window_scale)?)?;
+    window.set("set_window_scale",   lua.create_function(self::set_window_scale)?)?;
+    window.set("get_render_scale",   lua.create_function(self::get_render_scale)?)?;
+    window.set("set_frame_rate",     lua.create_function(self::set_frame_rate)?)?;
+    window.set("get_frame_time",     lua.create_function(self::get_frame_time)?)?;
+    window.set("get_time",           lua.create_function(self::get_time)?)?;
+    window.set("get_frame_rate",     lua.create_function(self::get_frame_rate)?)?;
+    window.set("get_focus",          lua.create_function(self::get_focus)?)?;
+    window.set("get_resize",         lua.create_function(self::get_resize)?)?;
+    window.set("dialog_message",     lua.create_function(self::dialog_message)?)?;
+    //window.set("dialog_pick_file",   lua.create_function(self::dialog_pick_file)?)?;
+    //window.set("dialog_pick_path",   lua.create_function(self::dialog_pick_path)?)?;
 
     global.set("window", window)?;
 
@@ -246,4 +199,43 @@ fn get_focus(_: &mlua::Lua, _: ()) -> mlua::Result<bool> {
 )]
 fn get_resize(_: &mlua::Lua, _: ()) -> mlua::Result<bool> {
     unsafe { Ok(ffi::IsWindowResized()) }
+}
+
+#[function(
+    from = "window",
+    info = "Show a message dialog.",
+    parameter(
+        name = "kind",
+        info = "Message kind.",
+        kind(user_data(name = "MessageKind"))
+    ),
+    parameter(name = "name", info = "Message window name.", kind = "string"),
+    parameter(name = "text", info = "Message window text.", kind = "string"),
+    result(
+        name = "dialog",
+        info = "True if the window size is different.",
+        kind = "boolean"
+    )
+)]
+fn dialog_message(
+    _: &mlua::Lua,
+    (kind, name, text): (usize, String, String),
+) -> mlua::Result<bool> {
+    let kind = match kind {
+        0 => rfd::MessageLevel::Info,
+        1 => rfd::MessageLevel::Warning,
+        _ => rfd::MessageLevel::Error,
+    };
+
+    let result = rfd::MessageDialog::new()
+        .set_level(kind)
+        .set_title(name)
+        .set_description(text)
+        .set_buttons(rfd::MessageButtons::YesNo)
+        .show();
+
+    match result {
+        rfd::MessageDialogResult::Yes => Ok(true),
+        _ => Ok(false),
+    }
 }
