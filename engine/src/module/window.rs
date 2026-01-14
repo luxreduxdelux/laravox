@@ -12,8 +12,8 @@ use raylib::prelude::*;
 pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
     let window = lua.create_table()?;
 
-    window.set("get_exit",           lua.create_function(self::get_exit)?)?;
-    window.set("get_full_screen",    lua.create_function(self::get_full_screen)?)?;
+    window.set("is_exit",            lua.create_function(self::is_exit)?)?;
+    window.set("is_full_screen",     lua.create_function(self::is_full_screen)?)?;
     window.set("toggle_full_screen", lua.create_function(self::toggle_full_screen)?)?;
     window.set("set_exit_key",       lua.create_function(self::set_exit_key)?)?;
     window.set("get_screen_scale",   lua.create_function(self::get_screen_scale)?)?;
@@ -24,8 +24,8 @@ pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
     window.set("get_frame_time",     lua.create_function(self::get_frame_time)?)?;
     window.set("get_time",           lua.create_function(self::get_time)?)?;
     window.set("get_frame_rate",     lua.create_function(self::get_frame_rate)?)?;
-    window.set("get_focus",          lua.create_function(self::get_focus)?)?;
-    window.set("get_resize",         lua.create_function(self::get_resize)?)?;
+    window.set("is_focus",           lua.create_function(self::is_focus)?)?;
+    window.set("is_scale_new",       lua.create_function(self::is_scale_new)?)?;
     window.set("dialog_message",     lua.create_function(self::dialog_message)?)?;
     //window.set("dialog_pick_file",   lua.create_function(self::dialog_pick_file)?)?;
     //window.set("dialog_pick_path",   lua.create_function(self::dialog_pick_path)?)?;
@@ -42,7 +42,7 @@ pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
     info = "Get the exit state of the window.",
     result(name = "state", info = "Exit state.", kind = "boolean")
 )]
-fn get_exit(_: &mlua::Lua, _: ()) -> mlua::Result<bool> {
+fn is_exit(_: &mlua::Lua, _: ()) -> mlua::Result<bool> {
     unsafe { Ok(ffi::WindowShouldClose()) }
 }
 
@@ -51,7 +51,7 @@ fn get_exit(_: &mlua::Lua, _: ()) -> mlua::Result<bool> {
     info = "Get the full-screen state of the window.",
     result(name = "state", info = "Full-screen state.", kind = "boolean")
 )]
-fn get_full_screen(_: &mlua::Lua, _: ()) -> mlua::Result<bool> {
+fn is_full_screen(_: &mlua::Lua, _: ()) -> mlua::Result<bool> {
     unsafe { Ok(ffi::IsWindowFullscreen()) }
 }
 
@@ -184,20 +184,20 @@ fn get_frame_rate(_: &mlua::Lua, _: ()) -> mlua::Result<i32> {
     info = "Get the focus state.",
     result(name = "state", info = "Focus state.", kind = "boolean")
 )]
-fn get_focus(_: &mlua::Lua, _: ()) -> mlua::Result<bool> {
+fn is_focus(_: &mlua::Lua, _: ()) -> mlua::Result<bool> {
     unsafe { Ok(ffi::IsWindowFocused()) }
 }
 
 #[function(
     from = "window",
-    info = "Check if the window size is different from the previous frame.",
+    info = "Check if the window scale is different from the previous frame.",
     result(
         name = "resize",
-        info = "True if the window size is different.",
+        info = "True if the window scale is different.",
         kind = "boolean"
     )
 )]
-fn get_resize(_: &mlua::Lua, _: ()) -> mlua::Result<bool> {
+fn is_scale_new(_: &mlua::Lua, _: ()) -> mlua::Result<bool> {
     unsafe { Ok(ffi::IsWindowResized()) }
 }
 

@@ -1,3 +1,4 @@
+use crate::module::general::*;
 use engine_macro::*;
 
 //================================================================
@@ -20,11 +21,11 @@ pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
 
     //================================================================
 
-    board.set("get_press",          lua.create_function(self::board::get_press)?)?;
-    board.set("get_press_repeat",   lua.create_function(self::board::get_press_repeat)?)?;
-    board.set("get_down",           lua.create_function(self::board::get_down)?)?;
-    board.set("get_release",        lua.create_function(self::board::get_release)?)?;
-    board.set("get_up",             lua.create_function(self::board::get_up)?)?;
+    board.set("is_press",           lua.create_function(self::board::is_press)?)?;
+    board.set("is_press_repeat",    lua.create_function(self::board::is_press_repeat)?)?;
+    board.set("is_release",         lua.create_function(self::board::is_release)?)?;
+    board.set("is_up",              lua.create_function(self::board::is_up)?)?;
+    board.set("is_down",            lua.create_function(self::board::is_down)?)?;
     board.set("get_last_press",     lua.create_function(self::board::get_last_press)?)?;
     board.set("get_last_character", lua.create_function(self::board::get_last_character)?)?;
     board.set("set_clip_board",     lua.create_function(self::board::set_clip_board)?)?;
@@ -32,10 +33,11 @@ pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
 
     //================================================================
 
-    mouse.set("get_press",      lua.create_function(self::mouse::get_press)?)?;
-    mouse.set("get_down",       lua.create_function(self::mouse::get_down)?)?;
-    mouse.set("get_release",    lua.create_function(self::mouse::get_release)?)?;
-    mouse.set("get_up",         lua.create_function(self::mouse::get_up)?)?;
+    mouse.set("is_press",       lua.create_function(self::mouse::is_press)?)?;
+    mouse.set("is_release",     lua.create_function(self::mouse::is_release)?)?;
+    mouse.set("is_up",          lua.create_function(self::mouse::is_up)?)?;
+    mouse.set("is_down",        lua.create_function(self::mouse::is_down)?)?;
+    mouse.set("is_hidden",      lua.create_function(self::mouse::is_hidden)?)?;
     mouse.set("get_last_press", lua.create_function(self::mouse::get_last_press)?)?;
     mouse.set("get_point",      lua.create_function(self::mouse::get_point)?)?;
     mouse.set("get_delta",      lua.create_function(self::mouse::get_delta)?)?;
@@ -46,12 +48,12 @@ pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
 
     //================================================================
 
-    pad.set("get_state",      lua.create_function(self::pad::get_state)?)?;
+    pad.set("is_press",       lua.create_function(self::pad::is_press)?)?;
+    pad.set("is_release",     lua.create_function(self::pad::is_release)?)?;
+    pad.set("is_up",          lua.create_function(self::pad::is_up)?)?;
+    pad.set("is_held",        lua.create_function(self::pad::is_down)?)?;
+    pad.set("is_active",      lua.create_function(self::pad::is_active)?)?;
     pad.set("get_name",       lua.create_function(self::pad::get_name)?)?;
-    pad.set("get_press",      lua.create_function(self::pad::get_press)?)?;
-    pad.set("get_down",       lua.create_function(self::pad::get_down)?)?;
-    pad.set("get_release",    lua.create_function(self::pad::get_release)?)?;
-    pad.set("get_up",         lua.create_function(self::pad::get_up)?)?;
     pad.set("get_last_press", lua.create_function(self::pad::get_last_press)?)?;
     pad.set("get_axis_count", lua.create_function(self::pad::get_axis_count)?)?;
     pad.set("get_axis_state", lua.create_function(self::pad::get_axis_state)?)?;
@@ -61,7 +63,7 @@ pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
 
     input.set("board", board)?;
     input.set("mouse", mouse)?;
-    input.set("pad", pad)?;
+    input.set("pad",   pad)?;
     global.set("input", input)?;
 
     Ok(())
@@ -79,8 +81,6 @@ mod board {
         332, 333, 334, 335, 336, 4, 5, 24, 25,
     ];
 
-    use crate::module::general::c_string;
-
     use super::*;
 
     #[function(
@@ -89,7 +89,7 @@ mod board {
         parameter(name = "code", info = "Key code.", kind = "number"),
         result(name = "state", info = "Key state.", kind = "boolean")
     )]
-    pub fn get_press(_: &mlua::Lua, code: i32) -> mlua::Result<bool> {
+    pub fn is_press(_: &mlua::Lua, code: i32) -> mlua::Result<bool> {
         Ok(unsafe { ffi::IsKeyPressed(code) })
     }
 
@@ -99,18 +99,8 @@ mod board {
         parameter(name = "code", info = "Key code.", kind = "number"),
         result(name = "state", info = "Key state.", kind = "boolean")
     )]
-    pub fn get_press_repeat(_: &mlua::Lua, code: i32) -> mlua::Result<bool> {
+    pub fn is_press_repeat(_: &mlua::Lua, code: i32) -> mlua::Result<bool> {
         Ok(unsafe { ffi::IsKeyPressedRepeat(code) })
-    }
-
-    #[function(
-        from = "input.board",
-        info = "Get the state (down) of a key.",
-        parameter(name = "code", info = "Key code.", kind = "number"),
-        result(name = "state", info = "Key state.", kind = "boolean")
-    )]
-    pub fn get_down(_: &mlua::Lua, code: i32) -> mlua::Result<bool> {
-        Ok(unsafe { ffi::IsKeyDown(code) })
     }
 
     #[function(
@@ -119,7 +109,7 @@ mod board {
         parameter(name = "code", info = "Key code.", kind = "number"),
         result(name = "state", info = "Key state.", kind = "boolean")
     )]
-    pub fn get_release(_: &mlua::Lua, code: i32) -> mlua::Result<bool> {
+    pub fn is_release(_: &mlua::Lua, code: i32) -> mlua::Result<bool> {
         Ok(unsafe { ffi::IsKeyReleased(code) })
     }
 
@@ -129,8 +119,18 @@ mod board {
         parameter(name = "code", info = "Key code.", kind = "number"),
         result(name = "state", info = "Key state.", kind = "boolean")
     )]
-    pub fn get_up(_: &mlua::Lua, code: i32) -> mlua::Result<bool> {
+    pub fn is_up(_: &mlua::Lua, code: i32) -> mlua::Result<bool> {
         Ok(unsafe { ffi::IsKeyUp(code) })
+    }
+
+    #[function(
+        from = "input.board",
+        info = "Get the state (down) of a key.",
+        parameter(name = "code", info = "Key code.", kind = "number"),
+        result(name = "state", info = "Key state.", kind = "boolean")
+    )]
+    pub fn is_down(_: &mlua::Lua, code: i32) -> mlua::Result<bool> {
+        Ok(unsafe { ffi::IsKeyDown(code) })
     }
 
     #[function(
@@ -140,7 +140,6 @@ mod board {
     )]
     pub fn get_last_press(_: &mlua::Lua, _: ()) -> mlua::Result<Option<i32>> {
         unsafe {
-            // TO-DO this is not the actual range of the entire key list
             for x in self::KEY_LIST {
                 if ffi::IsKeyPressed(x) {
                     return Ok(Some(x));
@@ -161,11 +160,17 @@ mod board {
             optional = true
         )
     )]
-    pub fn get_last_character(_: &mlua::Lua, _: ()) -> mlua::Result<Option<i32>> {
+    pub fn get_last_character(_: &mlua::Lua, _: ()) -> mlua::Result<Option<char>> {
         unsafe {
             let code = ffi::GetCharPressed();
 
-            if code == 0 { Ok(None) } else { Ok(Some(code)) }
+            if code == 0 {
+                Ok(None)
+            } else if let Some(code) = char::from_u32(code as u32) {
+                Ok(Some(code))
+            } else {
+                Ok(None)
+            }
         }
     }
 
@@ -176,7 +181,7 @@ mod board {
     )]
     pub fn set_clip_board(_: &mlua::Lua, text: String) -> mlua::Result<()> {
         unsafe {
-            ffi::SetClipboardText(c_string(&text).as_ptr());
+            ffi::SetClipboardText(c_string(&text)?.as_ptr());
             Ok(())
         }
     }
@@ -205,18 +210,8 @@ mod mouse {
         parameter(name = "code", info = "Mouse button code.", kind = "number"),
         result(name = "state", info = "Mouse button state.", kind = "boolean")
     )]
-    pub fn get_press(_: &mlua::Lua, code: i32) -> mlua::Result<bool> {
+    pub fn is_press(_: &mlua::Lua, code: i32) -> mlua::Result<bool> {
         Ok(unsafe { ffi::IsMouseButtonPressed(code) })
-    }
-
-    #[function(
-        from = "input.mouse",
-        info = "Get the state (down) of a mouse button.",
-        parameter(name = "code", info = "Mouse button code.", kind = "number"),
-        result(name = "state", info = "Mouse button state.", kind = "boolean")
-    )]
-    pub fn get_down(_: &mlua::Lua, code: i32) -> mlua::Result<bool> {
-        Ok(unsafe { ffi::IsMouseButtonDown(code) })
     }
 
     #[function(
@@ -225,7 +220,7 @@ mod mouse {
         parameter(name = "code", info = "Mouse button code.", kind = "number"),
         result(name = "state", info = "Mouse button state.", kind = "boolean")
     )]
-    pub fn get_release(_: &mlua::Lua, code: i32) -> mlua::Result<bool> {
+    pub fn is_release(_: &mlua::Lua, code: i32) -> mlua::Result<bool> {
         Ok(unsafe { ffi::IsMouseButtonReleased(code) })
     }
 
@@ -235,8 +230,27 @@ mod mouse {
         parameter(name = "code", info = "Mouse button code.", kind = "number"),
         result(name = "state", info = "Mouse button state.", kind = "boolean")
     )]
-    pub fn get_up(_: &mlua::Lua, code: i32) -> mlua::Result<bool> {
+    pub fn is_up(_: &mlua::Lua, code: i32) -> mlua::Result<bool> {
         Ok(unsafe { ffi::IsMouseButtonUp(code) })
+    }
+
+    #[function(
+        from = "input.mouse",
+        info = "Get the state (down) of a mouse button.",
+        parameter(name = "code", info = "Mouse button code.", kind = "number"),
+        result(name = "state", info = "Mouse button state.", kind = "boolean")
+    )]
+    pub fn is_down(_: &mlua::Lua, code: i32) -> mlua::Result<bool> {
+        Ok(unsafe { ffi::IsMouseButtonDown(code) })
+    }
+
+    #[function(
+        from = "input.mouse",
+        info = "Check if the mouse cursor is hidden.",
+        result(name = "hidden", info = "Hidden state.", kind = "boolean")
+    )]
+    pub fn is_hidden(_: &mlua::Lua, _: ()) -> mlua::Result<bool> {
+        Ok(unsafe { ffi::IsCursorHidden() })
     }
 
     #[function(
@@ -339,11 +353,55 @@ mod pad {
 
     #[function(
         from = "input.pad",
-        info = "Get the state of a game-pad.",
+        info = "Get the state (press) of a game-pad button.",
         parameter(name = "index", info = "Game-pad index.", kind = "number"),
-        result(name = "state", info = "Game-pad state.", kind = "boolean")
+        parameter(name = "code", info = "Game-pad button code.", kind = "number"),
+        result(name = "state", info = "Game-pad button state.", kind = "boolean")
     )]
-    pub fn get_state(_: &mlua::Lua, index: i32) -> mlua::Result<bool> {
+    pub fn is_press(_: &mlua::Lua, (index, code): (i32, i32)) -> mlua::Result<bool> {
+        Ok(unsafe { ffi::IsGamepadButtonPressed(index, code) })
+    }
+
+    #[function(
+        from = "input.pad",
+        info = "Get the state (release) of a game-pad button.",
+        parameter(name = "index", info = "Game-pad index.", kind = "number"),
+        parameter(name = "code", info = "Game-pad button code.", kind = "number"),
+        result(name = "state", info = "Game-pad button state.", kind = "boolean")
+    )]
+    pub fn is_release(_: &mlua::Lua, (index, code): (i32, i32)) -> mlua::Result<bool> {
+        Ok(unsafe { ffi::IsGamepadButtonReleased(index, code) })
+    }
+
+    #[function(
+        from = "input.pad",
+        info = "Get the state (up) of a game-pad button.",
+        parameter(name = "index", info = "Game-pad index.", kind = "number"),
+        parameter(name = "code", info = "Game-pad button code.", kind = "number"),
+        result(name = "state", info = "Game-pad button state.", kind = "boolean")
+    )]
+    pub fn is_up(_: &mlua::Lua, (index, code): (i32, i32)) -> mlua::Result<bool> {
+        Ok(unsafe { ffi::IsGamepadButtonUp(index, code) })
+    }
+
+    #[function(
+        from = "input.pad",
+        info = "Get the state (down) of a game-pad button.",
+        parameter(name = "index", info = "Game-pad index.", kind = "number"),
+        parameter(name = "code", info = "Game-pad button code.", kind = "number"),
+        result(name = "state", info = "Game-pad button state.", kind = "boolean")
+    )]
+    pub fn is_down(_: &mlua::Lua, (index, code): (i32, i32)) -> mlua::Result<bool> {
+        Ok(unsafe { ffi::IsGamepadButtonDown(index, code) })
+    }
+
+    #[function(
+        from = "input.pad",
+        info = "Check if a game-pad is active.",
+        parameter(name = "index", info = "Game-pad index.", kind = "number"),
+        result(name = "active", info = "Game-pad activity.", kind = "boolean")
+    )]
+    pub fn is_active(_: &mlua::Lua, index: i32) -> mlua::Result<bool> {
         Ok(unsafe { ffi::IsGamepadAvailable(index) })
     }
 
@@ -358,50 +416,6 @@ mod pad {
             let value = std::ffi::CStr::from_ptr(ffi::GetGamepadName(index));
             Ok(value.to_string_lossy().to_string())
         }
-    }
-
-    #[function(
-        from = "input.pad",
-        info = "Get the state (press) of a game-pad button.",
-        parameter(name = "index", info = "Game-pad index.", kind = "number"),
-        parameter(name = "code", info = "Game-pad button code.", kind = "number"),
-        result(name = "state", info = "Game-pad button state.", kind = "boolean")
-    )]
-    pub fn get_press(_: &mlua::Lua, (index, code): (i32, i32)) -> mlua::Result<bool> {
-        Ok(unsafe { ffi::IsGamepadButtonPressed(index, code) })
-    }
-
-    #[function(
-        from = "input.pad",
-        info = "Get the state (down) of a game-pad button.",
-        parameter(name = "index", info = "Game-pad index.", kind = "number"),
-        parameter(name = "code", info = "Game-pad button code.", kind = "number"),
-        result(name = "state", info = "Game-pad button state.", kind = "boolean")
-    )]
-    pub fn get_down(_: &mlua::Lua, (index, code): (i32, i32)) -> mlua::Result<bool> {
-        Ok(unsafe { ffi::IsGamepadButtonDown(index, code) })
-    }
-
-    #[function(
-        from = "input.pad",
-        info = "Get the state (release) of a game-pad button.",
-        parameter(name = "index", info = "Game-pad index.", kind = "number"),
-        parameter(name = "code", info = "Game-pad button code.", kind = "number"),
-        result(name = "state", info = "Game-pad button state.", kind = "boolean")
-    )]
-    pub fn get_release(_: &mlua::Lua, (index, code): (i32, i32)) -> mlua::Result<bool> {
-        Ok(unsafe { ffi::IsGamepadButtonReleased(index, code) })
-    }
-
-    #[function(
-        from = "input.pad",
-        info = "Get the state (up) of a game-pad button.",
-        parameter(name = "index", info = "Game-pad index.", kind = "number"),
-        parameter(name = "code", info = "Game-pad button code.", kind = "number"),
-        result(name = "state", info = "Game-pad button state.", kind = "boolean")
-    )]
-    pub fn get_up(_: &mlua::Lua, (index, code): (i32, i32)) -> mlua::Result<bool> {
-        Ok(unsafe { ffi::IsGamepadButtonUp(index, code) })
     }
 
     #[function(

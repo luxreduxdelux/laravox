@@ -13,12 +13,38 @@ use raylib::prelude::*;
 pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
     let sound = lua.create_table()?;
 
-    sound.set("new",         lua.create_function(self::Sound::new)?)?;
-    sound.set("new_archive", lua.create_function(self::Sound::new_archive)?)?;
+    sound.set("get_master_volume", lua.create_function(self::get_master_volume)?)?;
+    sound.set("set_master_volume", lua.create_function(self::set_master_volume)?)?;
+    sound.set("new",               lua.create_function(self::Sound::new)?)?;
+    sound.set("new_archive",       lua.create_function(self::Sound::new_archive)?)?;
 
     global.set("sound", sound)?;
 
     Ok(())
+}
+
+//================================================================
+
+#[function(
+    from = "sound",
+    info = "Get the current master volume.",
+    result(name = "volume", info = "Master volume.", kind = "number")
+)]
+fn get_master_volume(_: &mlua::Lua, _: ()) -> mlua::Result<f32> {
+    Ok(unsafe { ffi::GetMasterVolume() })
+}
+
+#[function(
+    from = "sound",
+    info = "Set the current master volume. Will affect both sound and music.",
+    parameter(name = "volume", info = "Master volume.", kind = "number")
+)]
+fn set_master_volume(_: &mlua::Lua, volume: f32) -> mlua::Result<()> {
+    unsafe {
+        ffi::SetMasterVolume(volume);
+
+        Ok(())
+    }
 }
 
 //================================================================
@@ -41,12 +67,12 @@ impl Sound {
     )]
     fn new(_: &mlua::Lua, path: String) -> mlua::Result<Self> {
         unsafe {
-            let inner = ffi::LoadSound(c_string(&path).as_ptr());
+            let inner = ffi::LoadSound(c_string(&path)?.as_ptr());
 
             if ffi::IsSoundValid(inner) {
                 Ok(Self { inner })
             } else {
-                Err(mlua::Error::runtime(format!(
+                Err(mlua::Error::external(format!(
                     "sound.new(): Error loading sound \"{path}\"."
                 )))
             }
@@ -76,7 +102,7 @@ impl Sound {
 
         unsafe {
             let inner = ffi::LoadWaveFromMemory(
-                c_string(&extension).as_ptr(),
+                c_string(&extension)?.as_ptr(),
                 data.as_ptr(),
                 data.len() as i32,
             );
@@ -85,7 +111,7 @@ impl Sound {
             if ffi::IsSoundValid(inner) {
                 Ok(Self { inner })
             } else {
-                Err(mlua::Error::runtime(format!(
+                Err(mlua::Error::external(format!(
                     "sound.new_archive(): Error loading sound \"{path}\"."
                 )))
             }
@@ -129,7 +155,7 @@ impl Sound {
         info = "Get the current play state.",
         result(name = "state", info = "Current play state.", kind = "boolean")
     )]
-    fn get_play(_: &mlua::Lua, this: &Self, _: ()) -> mlua::Result<bool> {
+    fn is_play(_: &mlua::Lua, this: &Self, _: ()) -> mlua::Result<bool> {
         unsafe { Ok(ffi::IsSoundPlaying(this.inner)) }
     }
 
@@ -185,7 +211,7 @@ impl mlua::UserData for Sound {
         method.add_method("stop",       Self::stop);
         method.add_method("pause",      Self::pause);
         method.add_method("resume",     Self::resume);
-        method.add_method("get_play",   Self::get_play);
+        method.add_method("is_play",    Self::is_play);
         method.add_method("set_volume", Self::set_volume);
         method.add_method("set_pitch",  Self::set_pitch);
         method.add_method("set_pan",    Self::set_pan);

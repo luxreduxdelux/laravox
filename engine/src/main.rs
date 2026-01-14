@@ -8,7 +8,6 @@ use raylib::prelude::*;
 use serde::Deserialize;
 use std::io::Read;
 
-// TO-DO not sure if this actually does impact Lua at all
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
@@ -128,7 +127,7 @@ impl Script {
                     return Ok(lua.load(buffer).into_function());
                 }
 
-                Err(mlua::Error::runtime(format!(
+                Err(mlua::Error::external(format!(
                     "No module \"{path}\" found in the \"main\" ZIP archive."
                 )))
             })?)?;
@@ -185,25 +184,23 @@ impl Script {
 
             self.lua.globals().set(
                 "print",
-                self.lua
-                    .create_function(|_, (value, debug): (mlua::Value, bool)| {
-                        if debug {
-                            let format = format!("{value:#?}");
-                            println!("{format}");
-                            return Ok(());
-                        } else if let Ok(value) = value.to_string() {
-                            println!("{value}");
-                        } else {
-                            println!("{value:#?}");
-                        }
+                self.lua.create_function(|_, value: mlua::Value| {
+                    println!("{value:#?}");
 
-                        Ok(())
-                    })?,
+                    Ok(())
+                })?,
             )?;
             self.lua.globals().set(
                 "format",
                 self.lua
                     .create_function(|_, value: mlua::Value| Ok(format!("{value:#?}")))?,
+            )?;
+
+            let string: mlua::Table = self.lua.globals().get("string")?;
+            string.set(
+                "sub",
+                self.lua
+                    .create_function(|_, value: String| Ok(format!("{value:#?}")))?,
             )?;
         }
 

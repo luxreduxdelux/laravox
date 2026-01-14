@@ -145,7 +145,7 @@ fn into_string(_: &mlua::Lua, (data, pretty): (mlua::Value, bool)) -> mlua::Resu
 
     match string {
         Ok(value) => Ok(value),
-        Err(error) => Err(mlua::Error::runtime(error.to_string())),
+        Err(error) => Err(mlua::Error::external(error.to_string())),
     }
 }
 
@@ -162,7 +162,7 @@ fn into_string(_: &mlua::Lua, (data, pretty): (mlua::Value, bool)) -> mlua::Resu
 fn from_string(lua: &mlua::Lua, data: String) -> mlua::Result<mlua::Value> {
     match serde_json::from_str::<Value>(&data) {
         Ok(value) => lua.to_value(&value),
-        Err(error) => Err(mlua::Error::runtime(error.to_string())),
+        Err(error) => Err(mlua::Error::external(error.to_string())),
     }
 }
 

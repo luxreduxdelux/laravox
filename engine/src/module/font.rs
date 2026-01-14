@@ -67,13 +67,17 @@ impl Font {
                 range.as_mut_ptr()
             };
 
-            let inner =
-                ffi::LoadFontEx(c_string(&path).as_ptr(), scale, pointer, range.len() as i32);
+            let inner = ffi::LoadFontEx(
+                c_string(&path)?.as_ptr(),
+                scale,
+                pointer,
+                range.len() as i32,
+            );
 
             if ffi::IsFontValid(inner) {
                 Ok(Self { inner })
             } else {
-                Err(mlua::Error::runtime(format!(
+                Err(mlua::Error::external(format!(
                     "font.new(): Error loading font \"{path}\"."
                 )))
             }
@@ -130,7 +134,7 @@ impl Font {
             };
 
             let inner = ffi::LoadFontFromMemory(
-                c_string(&extension).as_ptr(),
+                c_string(&extension)?.as_ptr(),
                 data.as_ptr(),
                 data.len() as i32,
                 scale,
@@ -141,8 +145,8 @@ impl Font {
             if ffi::IsFontValid(inner) {
                 Ok(Self { inner })
             } else {
-                Err(mlua::Error::runtime(format!(
-                    "font.new(): Error loading font \"{path}\"."
+                Err(mlua::Error::external(format!(
+                    "font.new_archive(): Error loading font \"{path}\"."
                 )))
             }
         }
@@ -168,7 +172,7 @@ impl Font {
 
             ffi::DrawTextEx(
                 this.inner,
-                c_string(&text).as_ptr(),
+                c_string(&text)?.as_ptr(),
                 point.into(),
                 scale,
                 space,
@@ -206,8 +210,7 @@ impl Font {
         let color: Color = lua.from_value(color)?;
 
         let length: i32 = text.len() as i32;
-        let text = std::ffi::CString::new(text).unwrap();
-        let text = text.as_ptr();
+        let text = c_string(&text)?;
 
         let mut text_shift_y: f32 = 0.0;
         let mut text_shift_x: f32 = 0.0;
@@ -227,8 +230,9 @@ impl Font {
 
         while i < length {
             let mut code_point_byte_count: i32 = 0;
-            let codepoint: i32 =
-                unsafe { ffi::GetCodepoint(text.offset(i as isize), &mut code_point_byte_count) };
+            let codepoint: i32 = unsafe {
+                ffi::GetCodepoint(text.as_ptr().offset(i as isize), &mut code_point_byte_count)
+            };
 
             let index: i32 = unsafe { ffi::GetGlyphIndex(this.inner, codepoint) };
 
@@ -351,7 +355,7 @@ impl Font {
         unsafe {
             lua.to_value(&Vector2::from(ffi::MeasureTextEx(
                 this.inner,
-                c_string(&text).as_ptr(),
+                c_string(&text)?.as_ptr(),
                 scale,
                 space,
             )))
@@ -384,8 +388,7 @@ impl Font {
         let box_2: Box2 = lua.from_value(box_2)?;
 
         let length: i32 = text.len() as i32;
-        let text = std::ffi::CString::new(text).unwrap();
-        let text = text.as_ptr();
+        let text = c_string(&text)?;
 
         let mut text_shift_y: f32 = 0.0;
         let mut text_shift_x: f32 = 0.0;
@@ -405,8 +408,9 @@ impl Font {
 
         while i < length {
             let mut code_point_byte_count: i32 = 0;
-            let codepoint: i32 =
-                unsafe { ffi::GetCodepoint(text.offset(i as isize), &mut code_point_byte_count) };
+            let codepoint: i32 = unsafe {
+                ffi::GetCodepoint(text.as_ptr().offset(i as isize), &mut code_point_byte_count)
+            };
 
             let index: i32 = unsafe { ffi::GetGlyphIndex(this.inner, codepoint) };
 

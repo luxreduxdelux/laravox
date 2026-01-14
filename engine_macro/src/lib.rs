@@ -6,6 +6,10 @@ use syn::{ItemFn, ItemStruct};
 
 //================================================================
 
+const META_PATH: &str = "engine_macro/out";
+
+//================================================================
+
 #[derive(Debug, FromMeta)]
 #[darling(derive_syn_parse)]
 struct Function {
@@ -264,9 +268,12 @@ pub fn module(argument_list: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 fn write_to_out(path: &str, data: &str) {
-    if !std::fs::exists("engine_macro/out").unwrap() {
-        std::fs::create_dir("engine_macro/out").unwrap();
+    if !std::fs::exists(self::META_PATH)
+        .expect("Unable to check the existence of the \"out\" folder.")
+    {
+        std::fs::create_dir(self::META_PATH).expect("Unable to create the \"out\" folder.")
     }
 
-    std::fs::write(format!("engine_macro/out/{}", path), data).unwrap();
+    std::fs::write(format!("{}/{}", self::META_PATH, path), data)
+        .expect("Unable to write to \"out\" folder.")
 }

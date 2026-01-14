@@ -39,12 +39,12 @@ impl Music {
     )]
     fn new(_: &mlua::Lua, path: String) -> mlua::Result<Self> {
         unsafe {
-            let inner = ffi::LoadMusicStream(c_string(&path).as_ptr());
+            let inner = ffi::LoadMusicStream(c_string(&path)?.as_ptr());
 
             if ffi::IsMusicValid(inner) {
                 Ok(Self { inner })
             } else {
-                Err(mlua::Error::runtime(format!(
+                Err(mlua::Error::external(format!(
                     "music.new(): Error loading music \"{path}\"."
                 )))
             }
@@ -96,7 +96,7 @@ impl Music {
         info = "Get the current play state.",
         result(name = "state", info = "Current play state.", kind = "boolean")
     )]
-    fn get_play(_: &mlua::Lua, this: &Self, _: ()) -> mlua::Result<bool> {
+    fn is_play(_: &mlua::Lua, this: &Self, _: ()) -> mlua::Result<bool> {
         unsafe { Ok(ffi::IsMusicStreamPlaying(this.inner)) }
     }
 
@@ -183,7 +183,7 @@ impl mlua::UserData for Music {
         method.add_method("stop",       Self::stop);
         method.add_method("pause",      Self::pause);
         method.add_method("resume",     Self::resume);
-        method.add_method("get_play",   Self::get_play);
+        method.add_method("is_play",    Self::is_play);
         method.add_method("get_length", Self::get_length);
         method.add_method("get_time",   Self::get_time);
         method.add_method("set_time",   Self::set_time);

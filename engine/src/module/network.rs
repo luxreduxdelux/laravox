@@ -1,3 +1,4 @@
+use crate::module::general::*;
 use engine_macro::*;
 
 //================================================================
@@ -94,9 +95,7 @@ impl Server {
 
         let socket: UdpSocket = UdpSocket::bind(address)?;
         let server_config = ServerConfig {
-            current_time: SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap(),
+            current_time: map_error(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH))?,
             max_clients: client_count,
             protocol_id: 0,
             public_addresses: vec![address],
@@ -134,7 +133,7 @@ impl Server {
     ) -> mlua::Result<(Vec<LuaValue>, Vec<u64>, Vec<u64>)> {
         let delta = Duration::from_millis(delta);
         this.server.update(delta);
-        this.transport.update(delta, &mut this.server);
+        map_error(this.transport.update(delta, &mut this.server))?;
 
         let mut message_list = Vec::new();
         let mut enter_list = Vec::new();
@@ -158,7 +157,7 @@ impl Server {
                 .server
                 .receive_message(client_id, DefaultChannel::ReliableOrdered)
             {
-                let message: serde_value::Value = rmp_serde::from_slice(&message).unwrap();
+                let message: serde_value::Value = map_error(rmp_serde::from_slice(&message))?;
                 let message = lua.to_value(&message)?;
 
                 message_list.push(lua.to_value(&(client_id, message))?);
@@ -177,7 +176,7 @@ impl Server {
     )]
     fn set(lua: &mlua::Lua, this: &mut Self, message: mlua::Value) -> mlua::Result<()> {
         let message: serde_value::Value = lua.from_value(message)?;
-        let message = rmp_serde::to_vec(&message).unwrap();
+        let message = map_error(rmp_serde::to_vec_named(&message))?;
 
         this.server
             .broadcast_message(DefaultChannel::ReliableOrdered, message);
@@ -197,7 +196,7 @@ impl Server {
         (message, client): (mlua::Value, u64),
     ) -> mlua::Result<()> {
         let message: serde_value::Value = lua.from_value(message)?;
-        let message = rmp_serde::to_vec(&message).unwrap();
+        let message = map_error(rmp_serde::to_vec_named(&message))?;
 
         this.server
             .send_message(client, DefaultChannel::ReliableOrdered, message);
@@ -217,7 +216,7 @@ impl Server {
         (message, client): (mlua::Value, u64),
     ) -> mlua::Result<()> {
         let message: serde_value::Value = lua.from_value(message)?;
-        let message = rmp_serde::to_vec(&message).unwrap();
+        let message = map_error(rmp_serde::to_vec_named(&message))?;
 
         this.server
             .broadcast_message_except(client, DefaultChannel::ReliableOrdered, message);
@@ -225,18 +224,16 @@ impl Server {
         Ok(())
     }
 
-    #[method(from = "server", info = "Disconnect a specific client.")]
+    #[method(from = "Server", info = "Disconnect a specific client.")]
     fn disconnect(_: &mlua::Lua, this: &mut Self, client: u64) -> mlua::Result<()> {
         this.server.disconnect(client);
-        this.transport.send_packets(&mut this.server);
 
         Ok(())
     }
 
-    #[method(from = "server", info = "Disconnect every client.")]
+    #[method(from = "Server", info = "Disconnect every client.")]
     fn disconnect_all(_: &mlua::Lua, this: &mut Self, _: ()) -> mlua::Result<()> {
-        this.server.disconnect_all();
-        this.transport.send_packets(&mut this.server);
+        this.transport.disconnect_all(&mut this.server);
 
         Ok(())
     }
@@ -310,10 +307,8 @@ impl Client {
             port,
         );
 
-        let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
-        let current_time = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap();
+        let socket = UdpSocket::bind("0.0.0.0:0")?;
+        let current_time = map_error(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH))?;
         let authentication = ClientAuthentication::Unsecure {
             server_addr: address,
             client_id: 0,
@@ -321,7 +316,11 @@ impl Client {
             protocol_id: 0,
         };
 
-        let transport = NetcodeClientTransport::new(current_time, authentication, socket).unwrap();
+        let transport = map_error(NetcodeClientTransport::new(
+            current_time,
+            authentication,
+            socket,
+        ))?;
 
         Ok(Self { client, transport })
     }
@@ -339,25 +338,25 @@ impl Client {
     fn update(lua: &mlua::Lua, this: &mut Self, delta: u64) -> mlua::Result<Vec<LuaValue>> {
         let delta = Duration::from_millis(delta);
         this.client.update(delta);
-        this.transport.update(delta, &mut this.client).unwrap();
+        map_error(this.transport.update(delta, &mut this.client))?;
 
         let mut message_list = Vec::new();
 
         if this.client.is_connected() {
             while let Some(message) = this.client.receive_message(DefaultChannel::ReliableOrdered) {
-                let message: serde_value::Value = rmp_serde::from_slice(&message).unwrap();
+                let message: serde_value::Value = map_error(rmp_serde::from_slice(&message))?;
                 let message = lua.to_value(&message)?;
 
                 message_list.push(lua.to_value(&message)?);
             }
-
-            this.transport.send_packets(&mut this.client).unwrap();
         }
+
+        map_error(this.transport.send_packets(&mut this.client))?;
 
         Ok(message_list)
     }
 
-    #[method(from = "client", info = "Get the round-trip time to the server.")]
+    #[method(from = "Client", info = "Get the round-trip time to the server.")]
     fn get_round_trip_time(_: &mlua::Lua, this: &mut Self, _: ()) -> mlua::Result<f64> {
         Ok(this.client.rtt())
     }
@@ -370,7 +369,7 @@ impl Client {
     fn set(lua: &mlua::Lua, this: &mut Self, message: mlua::Value) -> mlua::Result<()> {
         if this.client.is_connected() {
             let message: serde_value::Value = lua.from_value(message)?;
-            let message = rmp_serde::to_vec(&message).unwrap();
+            let message = map_error(rmp_serde::to_vec(&message))?;
 
             this.client
                 .send_message(DefaultChannel::ReliableOrdered, message);
@@ -379,7 +378,7 @@ impl Client {
         Ok(())
     }
 
-    #[method(from = "client", info = "Disconnect from the server.")]
+    #[method(from = "Client", info = "Disconnect from the server.")]
     fn disconnect(_: &mlua::Lua, this: &mut Self, _: ()) -> mlua::Result<()> {
         // NOTE: this.client.disconnect() does not appear to work, only transport does?
         this.transport.disconnect();
@@ -387,7 +386,7 @@ impl Client {
         Ok(())
     }
 
-    #[method(from = "client", info = "Get the connection status to the server.")]
+    #[method(from = "Client", info = "Get the connection status to the server.")]
     fn get_status(_: &mlua::Lua, this: &mut Self, _: ()) -> mlua::Result<(i32, Option<String>)> {
         if this.client.is_connected() {
             return Ok((0, None));

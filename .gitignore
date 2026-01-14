@@ -5,10 +5,9 @@ target/
 main/
 user.json
 out/
-main.sublime-project
-main.sublime-workspace
 error_*
 panic_*
+main.sublime-project
 
 # Remove Cargo.lock from gitignore if creating an executable, leave it for libraries
 # More information here https://doc.rust-lang.org/cargo/guide/cargo-toml-vs-cargo-lock.html

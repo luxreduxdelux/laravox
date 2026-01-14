@@ -14,11 +14,12 @@ use raylib::prelude::*;
 pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
     let screen = lua.create_table()?;
 
-    // TO-DO any chance of merging draw/draw_2D?
     screen.set("wipe",                lua.create_function(self::wipe)?)?;
     screen.set("draw",                lua.create_function(self::draw)?)?;
     screen.set("draw_2D",             lua.create_function(self::draw_2D)?)?;
     screen.set("draw_scissor",        lua.create_function(self::draw_scissor)?)?;
+    screen.set("draw_scissor_begin",  lua.create_function(self::draw_scissor_begin)?)?;
+    screen.set("draw_scissor_close",  lua.create_function(self::draw_scissor_close)?)?;
     screen.set("draw_box_2",          lua.create_function(self::draw_box_2)?)?;
     screen.set("draw_line",           lua.create_function(self::draw_line)?)?;
     screen.set("get_screen_to_world", lua.create_function(self::get_screen_to_world)?)?;
@@ -102,6 +103,38 @@ fn draw_scissor(lua: &mlua::Lua, (call, area): (mlua::Function, mlua::Value)) ->
         ffi::EndScissorMode();
 
         call
+    }
+}
+
+#[function(
+    from = "screen",
+    info = "Manually begin a scissor clip draw session. Use `draw_scissor` whenever possible.",
+    parameter(name = "area", info = "Draw area.", kind = "Box2")
+)]
+fn draw_scissor_begin(lua: &mlua::Lua, area: mlua::Value) -> mlua::Result<()> {
+    unsafe {
+        let area: Box2 = lua.from_value(area)?;
+
+        ffi::BeginScissorMode(
+            area.p_x as i32,
+            area.p_y as i32,
+            area.s_x as i32,
+            area.s_y as i32,
+        );
+
+        Ok(())
+    }
+}
+
+#[function(
+    from = "screen",
+    info = "Manually close a scissor clip draw session. Use `draw_scissor` whenever possible."
+)]
+fn draw_scissor_close(_: &mlua::Lua, _: ()) -> mlua::Result<()> {
+    unsafe {
+        ffi::EndScissorMode();
+
+        Ok(())
     }
 }
 

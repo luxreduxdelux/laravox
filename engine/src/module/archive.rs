@@ -1,3 +1,4 @@
+use crate::module::general::*;
 use engine_macro::*;
 
 //================================================================
@@ -30,14 +31,21 @@ impl Archive {
     pub fn borrow_file(path: &str, user: mlua::AnyUserData) -> mlua::Result<(Vec<u8>, String)> {
         if let Ok(mut archive) = user.borrow_mut::<Self>() {
             let token: Vec<&str> = path.split(".").collect();
-            let token = format!(".{}", token.get(1).unwrap());
-            let mut find = archive.inner.by_path(path).unwrap();
-            let mut file = Vec::new();
-            find.read_to_end(&mut file)?;
 
-            Ok((file, token))
+            if let Some(extension) = token.get(1) {
+                let extension = format!(".{}", extension);
+                let mut find = map_error(archive.inner.by_path(path))?;
+                let mut file = Vec::new();
+                find.read_to_end(&mut file)?;
+
+                Ok((file, extension))
+            } else {
+                Err(mlua::Error::external(format!(
+                    "Missing extension for path \"{path}\"."
+                )))
+            }
         } else {
-            Err(mlua::Error::runtime(
+            Err(mlua::Error::external(
                 "Archive argument for function is not of type Archive.",
             ))
         }
@@ -55,7 +63,7 @@ impl Archive {
     )]
     fn new(_: &mlua::Lua, path: String) -> mlua::Result<Self> {
         let inner = std::fs::File::open(path)?;
-        let inner = zip::ZipArchive::new(inner).unwrap();
+        let inner = map_error(zip::ZipArchive::new(inner))?;
 
         Ok(Self { inner })
     }
@@ -93,14 +101,18 @@ impl Archive {
         this: &mut Self,
         (path, binary): (String, bool),
     ) -> mlua::Result<mlua::Value> {
-        let mut find = this.inner.by_path(path).unwrap();
-        let mut file = Vec::new();
-        find.read_to_end(&mut file)?;
+        let mut find = map_error(this.inner.by_path(path))?;
 
         if binary {
+            let mut file = Vec::new();
+            find.read_to_end(&mut file)?;
+
             Ok(lua.to_value(&file)?)
         } else {
-            Ok(lua.to_value(&String::from_utf8(file).unwrap())?)
+            let mut file = String::new();
+            find.read_to_string(&mut file)?;
+
+            Ok(lua.to_value(&file)?)
         }
     }
 

@@ -46,12 +46,12 @@ impl Texture {
     )]
     fn new(_: &mlua::Lua, path: String) -> mlua::Result<Self> {
         unsafe {
-            let inner = ffi::LoadTexture(c_string(&path).as_ptr());
+            let inner = ffi::LoadTexture(c_string(&path)?.as_ptr());
 
             if ffi::IsTextureValid(inner) {
                 Ok(Self { inner })
             } else {
-                Err(mlua::Error::runtime(format!(
+                Err(mlua::Error::external(format!(
                     "texture.new(): Error loading texture \"{path}\"."
                 )))
             }
@@ -81,7 +81,7 @@ impl Texture {
 
         unsafe {
             let inner = ffi::LoadImageFromMemory(
-                c_string(&extension).as_ptr(),
+                c_string(&extension)?.as_ptr(),
                 data.as_ptr(),
                 data.len() as i32,
             );
@@ -90,7 +90,7 @@ impl Texture {
             if ffi::IsTextureValid(inner) {
                 Ok(Self { inner })
             } else {
-                Err(mlua::Error::runtime(format!(
+                Err(mlua::Error::external(format!(
                     "texture.new_archive(): Error loading texture \"{path}\"."
                 )))
             }
@@ -195,7 +195,7 @@ impl TextureTarget {
             if ffi::IsRenderTextureValid(inner) {
                 Ok(Self { inner })
             } else {
-                Err(mlua::Error::runtime(
+                Err(mlua::Error::external(
                     "texture_target.new(): Error loading render-target texture.",
                 ))
             }

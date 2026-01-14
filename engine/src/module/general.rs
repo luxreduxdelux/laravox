@@ -1,6 +1,6 @@
 use raylib::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::{ffi::CString, path::Path};
+use std::ffi::CString;
 
 //================================================================
 
@@ -36,6 +36,24 @@ impl From<Camera2D> for ffi::Camera2D {
 
 //================================================================
 
-pub fn c_string(text: &str) -> CString {
-    CString::new(text).unwrap()
+pub fn c_string(text: &str) -> mlua::Result<CString> {
+    let convert = CString::new(text);
+
+    if let Ok(convert) = convert {
+        Ok(convert)
+    } else {
+        Err(mlua::Error::external(format!(
+            "Error converting Rust string to C string \"{text}\"."
+        )))
+    }
+}
+
+pub fn map_error<T, E>(result: std::result::Result<T, E>) -> mlua::Result<T>
+where
+    E: Into<Box<dyn std::error::Error + Send + Sync>>,
+{
+    match result {
+        Ok(value) => Ok(value),
+        Err(error) => Err(mlua::Error::ExternalError(error.into().into())),
+    }
 }
