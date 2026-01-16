@@ -130,7 +130,7 @@ impl Server {
         lua: &mlua::Lua,
         this: &mut Self,
         delta: u64,
-    ) -> mlua::Result<(Vec<LuaValue>, Vec<u64>, Vec<u64>)> {
+    ) -> mlua::Result<(Vec<mlua::Value>, Vec<u64>, Vec<u64>)> {
         let delta = Duration::from_millis(delta);
         this.server.update(delta);
         map_error(this.transport.update(delta, &mut this.server))?;
@@ -143,6 +143,7 @@ impl Server {
             match event {
                 ServerEvent::ClientConnected { client_id } => {
                     println!("Client connect {client_id}");
+
                     enter_list.push(client_id);
                 }
                 ServerEvent::ClientDisconnected { client_id, reason } => {
@@ -237,17 +238,36 @@ impl Server {
 
         Ok(())
     }
+
+    #[method(from = "Server", info = "Get the user-data for a specific client.")]
+    fn get_client_user_data(
+        lua: &mlua::Lua,
+        this: &mut Self,
+        client: u64,
+    ) -> mlua::Result<Option<mlua::Value>> {
+        let user_data = if let Some(user_data) = this.transport.user_data(client) {
+            let message: serde_value::Value = map_error(rmp_serde::from_slice(&user_data))?;
+            let message = lua.to_value(&message)?;
+
+            Some(message)
+        } else {
+            None
+        };
+
+        Ok(user_data)
+    }
 }
 
 #[rustfmt::skip]
 impl mlua::UserData for Server {
     fn add_methods<M: mlua::UserDataMethods<Self>>(method: &mut M) {
-        method.add_method_mut("update",            Self::update);
-        method.add_method_mut("set",               Self::set);
-        method.add_method_mut("set_client",        Self::set_client);
-        method.add_method_mut("set_client_except", Self::set_client_except);
-        method.add_method_mut("disconnect",        Self::disconnect);
-        method.add_method_mut("disconnect_all",    Self::disconnect_all);
+        method.add_method_mut("update",               Self::update);
+        method.add_method_mut("set",                  Self::set);
+        method.add_method_mut("set_client",           Self::set_client);
+        method.add_method_mut("set_client_except",    Self::set_client_except);
+        method.add_method_mut("disconnect",           Self::disconnect);
+        method.add_method_mut("disconnect_all",       Self::disconnect_all);
+        method.add_method_mut("get_client_user_data", Self::get_client_user_data);
     }
 }
 
@@ -290,6 +310,7 @@ impl Client {
             kind = "number"
         ),
         parameter(name = "port", info = "Address port.", kind = "number"),
+        parameter(name = "user_data", info = "User data.", kind = "table"),
         result(
             name = "client",
             info = "Client resource.",
@@ -297,8 +318,15 @@ impl Client {
         )
     )]
     fn new_client(
-        _: &mlua::Lua,
-        (address_a, address_b, address_c, address_d, port): (u8, u8, u8, u8, u16),
+        lua: &mlua::Lua,
+        (address_a, address_b, address_c, address_d, port, user_data): (
+            u8,
+            u8,
+            u8,
+            u8,
+            u16,
+            Option<mlua::Value>,
+        ),
     ) -> mlua::Result<Self> {
         let client = RenetClient::new(ConnectionConfig::default());
 
@@ -307,12 +335,22 @@ impl Client {
             port,
         );
 
+        let user_data = if let Some(user_data) = user_data {
+            let user_data: serde_value::Value = lua.from_value(user_data)?;
+            let mut user_data = map_error(rmp_serde::to_vec(&user_data))?;
+            user_data.resize(256, 0);
+
+            Some(user_data.try_into().unwrap())
+        } else {
+            None
+        };
+
         let socket = UdpSocket::bind("0.0.0.0:0")?;
         let current_time = map_error(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH))?;
         let authentication = ClientAuthentication::Unsecure {
             server_addr: address,
             client_id: 0,
-            user_data: None,
+            user_data,
             protocol_id: 0,
         };
 
@@ -335,7 +373,7 @@ impl Client {
             kind = "table"
         )
     )]
-    fn update(lua: &mlua::Lua, this: &mut Self, delta: u64) -> mlua::Result<Vec<LuaValue>> {
+    fn update(lua: &mlua::Lua, this: &mut Self, delta: u64) -> mlua::Result<Vec<mlua::Value>> {
         let delta = Duration::from_millis(delta);
         this.client.update(delta);
         map_error(this.transport.update(delta, &mut this.client))?;
@@ -354,11 +392,6 @@ impl Client {
         map_error(this.transport.send_packets(&mut this.client))?;
 
         Ok(message_list)
-    }
-
-    #[method(from = "Client", info = "Get the round-trip time to the server.")]
-    fn get_round_trip_time(_: &mlua::Lua, this: &mut Self, _: ()) -> mlua::Result<f64> {
-        Ok(this.client.rtt())
     }
 
     #[method(
@@ -386,15 +419,32 @@ impl Client {
         Ok(())
     }
 
-    #[method(from = "Client", info = "Get the connection status to the server.")]
-    fn get_status(_: &mlua::Lua, this: &mut Self, _: ()) -> mlua::Result<(i32, Option<String>)> {
+    #[method(
+        from = "Client",
+        info = "Get the connection status to the server.",
+        result(
+            name = "status",
+            info = "Connection status.",
+            kind(user_data(name = "ConnectionStatus"))
+        )
+    )]
+    fn get_status(_: &mlua::Lua, this: &mut Self, _: ()) -> mlua::Result<usize> {
         if this.client.is_connected() {
-            return Ok((0, None));
+            return Ok(0);
         } else if this.client.is_connecting() {
-            return Ok((1, None));
+            return Ok(1);
         }
 
-        Ok((2, this.client.disconnect_reason().map(|x| x.to_string())))
+        Ok(2)
+    }
+
+    #[method(
+        from = "Client",
+        info = "Get the client's unique identifier.",
+        result(name = "identifier", info = "Client identifier.", kind = "number")
+    )]
+    fn get_identifier(_: &mlua::Lua, this: &mut Self, _: ()) -> mlua::Result<u64> {
+        Ok(this.transport.client_id())
     }
 }
 
@@ -402,10 +452,10 @@ impl Client {
 impl mlua::UserData for Client {
     fn add_methods<M: mlua::UserDataMethods<Self>>(method: &mut M) {
         method.add_method_mut("update",              Self::update);
-        method.add_method_mut("get_round_trip_time", Self::get_round_trip_time);
         method.add_method_mut("set",                 Self::set);
         method.add_method_mut("disconnect",          Self::disconnect);
         method.add_method_mut("get_status",          Self::get_status);
+        method.add_method_mut("get_identifier",      Self::get_identifier);
     }
 }
 

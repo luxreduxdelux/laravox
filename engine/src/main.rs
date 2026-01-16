@@ -33,7 +33,7 @@ struct ContextInfo {
 
 impl Context {
     fn new(script: &Script) -> anyhow::Result<Self> {
-        let info = script.info.call::<LuaValue>(())?;
+        let info = script.info.call::<mlua::Value>(())?;
         let info: ContextInfo = script.lua.from_value(info)?;
 
         let mut flag = 0;
