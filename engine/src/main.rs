@@ -196,11 +196,12 @@ impl Script {
                     .create_function(|_, value: mlua::Value| Ok(format!("{value:#?}")))?,
             )?;
 
+            // Add UTF-8 compliant sub-string replacement.
             let string: mlua::Table = self.lua.globals().get("string")?;
             string.set(
                 "sub",
                 self.lua
-                    .create_function(|_, value: String| Ok(format!("{value:#?}")))?,
+                    .create_function(crate::module::general::sub_string)?,
             )?;
         }
 

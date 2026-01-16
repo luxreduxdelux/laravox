@@ -57,3 +57,28 @@ where
         Err(error) => Err(mlua::Error::ExternalError(error.into().into())),
     }
 }
+
+pub fn sub_string(_: &mlua::Lua, (value, index_a, index_b): (String, isize, Option<isize>)) -> mlua::Result<String> {
+    let character: Vec<char> = value.chars().collect();
+    let length = character.len() as isize;
+
+    if length == 0 {
+        return Ok(String::new());
+    }
+
+    let index_b = index_b.unwrap_or(-1);
+
+    let mut a = if index_a < 0 { length + index_a } else { index_a - 1 };
+    let mut b = if index_b < 0 { length + index_b } else { index_b - 1 };
+
+    a = a.max(0);
+    b = b.min(length - 1);
+
+    if a > b || a >= length {
+        return Ok(String::new());
+    }
+
+    Ok(character[a as usize..=b as usize]
+        .iter()
+        .collect())
+}
