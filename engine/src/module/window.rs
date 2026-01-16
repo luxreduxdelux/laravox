@@ -20,6 +20,7 @@ pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
     window.set("get_window_scale",   lua.create_function(self::get_window_scale)?)?;
     window.set("set_window_scale",   lua.create_function(self::set_window_scale)?)?;
     window.set("get_render_scale",   lua.create_function(self::get_render_scale)?)?;
+    window.set("set_frame_sync",     lua.create_function(self::set_frame_sync)?)?;
     window.set("set_frame_rate",     lua.create_function(self::set_frame_rate)?)?;
     window.set("get_frame_time",     lua.create_function(self::get_frame_time)?)?;
     window.set("get_time",           lua.create_function(self::get_time)?)?;
@@ -137,6 +138,23 @@ fn get_render_scale(lua: &mlua::Lua, _: ()) -> mlua::Result<mlua::Value> {
             ffi::GetRenderWidth() as f32,
             ffi::GetRenderHeight() as f32,
         ))
+    }
+}
+
+#[function(
+    from = "window",
+    info = "Set the frame sync.",
+    parameter(name = "sync", info = "Frame sync.", kind = "boolean")
+)]
+fn set_frame_sync(_: &mlua::Lua, sync: bool) -> mlua::Result<()> {
+    unsafe {
+        if sync {
+            ffi::SetWindowState(ConfigFlags::FLAG_VSYNC_HINT as u32);
+        } else {
+            ffi::ClearWindowState(ConfigFlags::FLAG_VSYNC_HINT as u32);
+        }
+
+        Ok(())
     }
 }
 

@@ -1,7 +1,7 @@
 const META_HEADER: &str = r#"---@meta
 
----@class laravox
-laravox = {}
+---@class flak
+flak = {}
 
 "#;
 const META_FILE: &str = "meta.lua";

@@ -51,7 +51,7 @@ pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
     pad.set("is_press",       lua.create_function(self::pad::is_press)?)?;
     pad.set("is_release",     lua.create_function(self::pad::is_release)?)?;
     pad.set("is_up",          lua.create_function(self::pad::is_up)?)?;
-    pad.set("is_held",        lua.create_function(self::pad::is_down)?)?;
+    pad.set("is_down",        lua.create_function(self::pad::is_down)?)?;
     pad.set("is_active",      lua.create_function(self::pad::is_active)?)?;
     pad.set("get_name",       lua.create_function(self::pad::get_name)?)?;
     pad.set("get_last_press", lua.create_function(self::pad::get_last_press)?)?;

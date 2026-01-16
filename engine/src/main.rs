@@ -51,7 +51,7 @@ impl Context {
 
         let (mut handle, thread) = raylib::init()
             .size(info.scale.0, info.scale.1)
-            .title(&info.name.unwrap_or("Laravox".to_string()))
+            .title(&info.name.unwrap_or("Flak".to_string()))
             .resizable()
             .log_level(if info.log {
                 TraceLogLevel::LOG_ALL
@@ -101,7 +101,7 @@ impl Script {
     const ENTRY_INFO: &str = "info";
     const ENTRY_MAIN: &str = "main";
     const ENTRY_FAIL: &str = "fail";
-    const HOOK_NAME: &str = "laravox";
+    const HOOK_NAME: &str = "flak";
 
     fn new(set_window_global: bool) -> anyhow::Result<Self> {
         let lua = unsafe { Lua::unsafe_new() };

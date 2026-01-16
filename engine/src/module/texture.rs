@@ -6,6 +6,7 @@ use engine_macro::*;
 
 use mlua::prelude::*;
 use raylib::prelude::*;
+use std::mem::MaybeUninit;
 
 //================================================================
 
@@ -18,6 +19,8 @@ pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
 
     texture.set("new",         lua.create_function(self::Texture::new)?)?;
     texture.set("new_archive", lua.create_function(self::Texture::new_archive)?)?;
+    texture.set("draw_batch",  lua.create_function(self::Texture::draw_batch)?)?;
+
     texture_target.set("new",  lua.create_function(self::TextureTarget::new)?)?;
 
     global.set("texture",        texture)?;
@@ -27,6 +30,38 @@ pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
 }
 
 //================================================================
+
+#[repr(C)]
+#[derive(Debug)]
+struct TextureBatch {
+    // Texture ID.
+    identifier: u32,
+    // Z-index.
+    index: u32,
+    // Source Box2 point + scale.
+    s_p_x: f32,
+    s_p_y: f32,
+    s_s_x: f32,
+    s_s_y: f32,
+    // Target Box2 point + scale.
+    t_p_x: f32,
+    t_p_y: f32,
+    t_s_x: f32,
+    t_s_y: f32,
+    // Point.
+    p_x: f32,
+    p_y: f32,
+    // Scale.
+    s_x: i32,
+    s_y: i32,
+    // Angle.
+    angle: f32,
+    // Color.
+    r: u8,
+    g: u8,
+    b: u8,
+    a: u8,
+}
 
 #[class(info = "Texture class.")]
 struct Texture {
@@ -97,6 +132,70 @@ impl Texture {
         }
     }
 
+    #[function(
+        from = "texture",
+        info = "Perform a batch draw.",
+        parameter(
+            name = "buffer",
+            info = "Texture batch buffer pointer.",
+            kind(user_data(name = "cdata"))
+        ),
+        parameter(name = "length", info = "Texture batch length.", kind = "number")
+    )]
+    #[rustfmt::skip]
+    fn draw_batch(_: &mlua::Lua, (buffer, length): (mlua::Value, usize)) -> mlua::Result<()> {
+        let buffer = buffer.to_pointer();
+        let buffer =
+            unsafe { std::slice::from_raw_parts_mut(buffer as *mut TextureBatch, length) };
+
+        let mut texture: ffi::Texture2D = unsafe { MaybeUninit::zeroed().assume_init() };
+
+        buffer.sort_by(|a, b| {
+            if a.index != b.index {
+                a.index.cmp(&b.index)
+            } else {
+                a.identifier.cmp(&b.identifier)
+            }
+        });
+
+        for entry in buffer {
+            unsafe {
+                texture.id     = entry.identifier;
+                texture.width  = entry.s_x;
+                texture.height = entry.s_y;
+
+                ffi::DrawTexturePro(
+                    texture,
+                    ffi::Rectangle {
+                        x:      entry.s_p_x,
+                        y:      entry.s_p_y,
+                        width:  entry.s_s_x,
+                        height: entry.s_s_y,
+                    },
+                    ffi::Rectangle {
+                        x:      entry.t_p_x,
+                        y:      entry.t_p_y,
+                        width:  entry.t_s_x,
+                        height: entry.t_s_y,
+                    },
+                    ffi::Vector2 {
+                        x: entry.p_x,
+                        y: entry.p_y,
+                    },
+                    entry.angle,
+                    ffi::Color {
+                        r: entry.r,
+                        g: entry.g,
+                        b: entry.b,
+                        a: entry.a,
+                    },
+                );
+            }
+        }
+
+        Ok(())
+    }
+
     #[method(
         from = "Texture",
         info = "Draw texture.",
@@ -138,6 +237,15 @@ impl Texture {
 
     #[method(
         from = "Texture",
+        info = "Get texture identifier.",
+        result(name = "identifier", info = "Texture identifier.", kind = "number")
+    )]
+    fn get_identifier(_: &mlua::Lua, this: &Self, _: ()) -> mlua::Result<u32> {
+        Ok(this.inner.id)
+    }
+
+    #[method(
+        from = "Texture",
         info = "Get texture scale.",
         result(name = "scale", info = "Texture scale.", kind = "Vector2")
     )]
@@ -160,8 +268,9 @@ impl Drop for Texture {
 impl mlua::UserData for Texture {
     #[rustfmt::skip]
     fn add_methods<M: mlua::UserDataMethods<Self>>(method: &mut M) {
-        method.add_method("draw",      Self::draw);
-        method.add_method("get_scale", Self::get_scale);
+        method.add_method("draw",            Self::draw);
+        method.add_method("get_identifier",  Self::get_identifier);
+        method.add_method("get_scale",       Self::get_scale);
     }
 }
 

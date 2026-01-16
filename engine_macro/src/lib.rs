@@ -58,7 +58,7 @@ impl Function {
         let from = if method {
             &self.from
         } else {
-            &format!("laravox.{}", self.from)
+            &format!("flak.{}", self.from)
         };
         let method = if method { ":" } else { "." };
 
@@ -115,7 +115,7 @@ impl Module {
             buffer.push_str(&format!("---{}\n", line.trim()));
         }
 
-        buffer.push_str(&format!("laravox.{} = {{}}", self.name));
+        buffer.push_str(&format!("flak.{} = {{}}", self.name));
 
         write_to_out(&format!("module_{}", &self.name), &buffer);
     }

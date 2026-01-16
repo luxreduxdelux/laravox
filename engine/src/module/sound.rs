@@ -52,6 +52,7 @@ fn set_master_volume(_: &mlua::Lua, volume: f32) -> mlua::Result<()> {
 #[class(info = "Sound class.")]
 struct Sound {
     inner: ffi::Sound,
+    alias: Vec<ffi::Sound>,
 }
 
 impl Sound {
@@ -59,18 +60,31 @@ impl Sound {
         from = "sound",
         info = "Create a new Sound resource.",
         parameter(name = "path", info = "Path to sound.", kind = "string"),
+        parameter(
+            name = "count",
+            info = "Sound alias copy count.",
+            kind = "number",
+            optional = true
+        ),
         result(
             name = "sound",
             info = "Sound resource.",
             kind(user_data(name = "Sound"))
         )
     )]
-    fn new(_: &mlua::Lua, path: String) -> mlua::Result<Self> {
+    fn new(_: &mlua::Lua, (path, count): (String, Option<usize>)) -> mlua::Result<Self> {
         unsafe {
             let inner = ffi::LoadSound(c_string(&path)?.as_ptr());
+            let mut alias = Vec::new();
 
             if ffi::IsSoundValid(inner) {
-                Ok(Self { inner })
+                if let Some(count) = count {
+                    for _ in 0..count {
+                        alias.push(ffi::LoadSoundAlias(inner));
+                    }
+                }
+
+                Ok(Self { inner, alias })
             } else {
                 Err(mlua::Error::external(format!(
                     "sound.new(): Error loading sound \"{path}\"."
@@ -88,6 +102,12 @@ impl Sound {
             info = "Archive to load the asset from.",
             kind(user_data(name = "Archive"))
         ),
+        parameter(
+            name = "count",
+            info = "Sound alias copy count.",
+            kind = "number",
+            optional = true
+        ),
         result(
             name = "sound",
             info = "Sound resource.",
@@ -96,7 +116,7 @@ impl Sound {
     )]
     fn new_archive(
         _: &mlua::Lua,
-        (path, archive): (String, mlua::AnyUserData),
+        (path, archive, count): (String, mlua::AnyUserData, Option<usize>),
     ) -> mlua::Result<Self> {
         let (data, extension) = Archive::borrow_file(&path, archive)?;
 
@@ -107,9 +127,16 @@ impl Sound {
                 data.len() as i32,
             );
             let inner = ffi::LoadSoundFromWave(inner);
+            let mut alias = Vec::new();
 
             if ffi::IsSoundValid(inner) {
-                Ok(Self { inner })
+                if let Some(count) = count {
+                    for _ in 0..count {
+                        alias.push(ffi::LoadSoundAlias(inner));
+                    }
+                }
+
+                Ok(Self { inner, alias })
             } else {
                 Err(mlua::Error::external(format!(
                     "sound.new_archive(): Error loading sound \"{path}\"."
@@ -118,34 +145,98 @@ impl Sound {
         }
     }
 
-    #[method(from = "Sound", info = "Play sound.")]
-    fn play(_: &mlua::Lua, this: &Self, _: ()) -> mlua::Result<()> {
+    #[method(
+        from = "Sound",
+        info = "Play sound.",
+        parameter(
+            name = "alias",
+            info = "Alias index.",
+            kind = "number",
+            optional = true
+        )
+    )]
+    fn play(_: &mlua::Lua, this: &Self, alias: Option<usize>) -> mlua::Result<()> {
         unsafe {
-            ffi::PlaySound(this.inner);
+            if let Some(alias) = alias
+                && let Some(alias) = this.alias.get(alias)
+            {
+                ffi::PlaySound(*alias);
+            } else {
+                ffi::PlaySound(this.inner);
+            }
+
             Ok(())
         }
     }
 
-    #[method(from = "Sound", info = "Stop sound.")]
-    fn stop(_: &mlua::Lua, this: &Self, _: ()) -> mlua::Result<()> {
+    #[method(
+        from = "Sound",
+        info = "Stop sound.",
+        parameter(
+            name = "alias",
+            info = "Alias index.",
+            kind = "number",
+            optional = true
+        )
+    )]
+    fn stop(_: &mlua::Lua, this: &Self, alias: Option<usize>) -> mlua::Result<()> {
         unsafe {
-            ffi::StopSound(this.inner);
+            if let Some(alias) = alias
+                && let Some(alias) = this.alias.get(alias)
+            {
+                ffi::StopSound(*alias);
+            } else {
+                ffi::StopSound(this.inner);
+            }
+
             Ok(())
         }
     }
 
-    #[method(from = "Sound", info = "Pause sound.")]
-    fn pause(_: &mlua::Lua, this: &Self, _: ()) -> mlua::Result<()> {
+    #[method(
+        from = "Sound",
+        info = "Pause sound.",
+        parameter(
+            name = "alias",
+            info = "Alias index.",
+            kind = "number",
+            optional = true
+        )
+    )]
+    fn pause(_: &mlua::Lua, this: &Self, alias: Option<usize>) -> mlua::Result<()> {
         unsafe {
-            ffi::PauseSound(this.inner);
+            if let Some(alias) = alias
+                && let Some(alias) = this.alias.get(alias)
+            {
+                ffi::PauseSound(*alias);
+            } else {
+                ffi::PauseSound(this.inner);
+            }
+
             Ok(())
         }
     }
 
-    #[method(from = "Sound", info = "Resume sound.")]
-    fn resume(_: &mlua::Lua, this: &Self, _: ()) -> mlua::Result<()> {
+    #[method(
+        from = "Sound",
+        info = "Resume sound.",
+        parameter(
+            name = "alias",
+            info = "Alias index.",
+            kind = "number",
+            optional = true
+        )
+    )]
+    fn resume(_: &mlua::Lua, this: &Self, alias: Option<usize>) -> mlua::Result<()> {
         unsafe {
-            ffi::ResumeSound(this.inner);
+            if let Some(alias) = alias
+                && let Some(alias) = this.alias.get(alias)
+            {
+                ffi::ResumeSound(*alias);
+            } else {
+                ffi::ResumeSound(this.inner);
+            }
+
             Ok(())
         }
     }
@@ -153,20 +244,59 @@ impl Sound {
     #[method(
         from = "Sound",
         info = "Get the current play state.",
-        result(name = "state", info = "Current play state.", kind = "boolean")
+        result(name = "state", info = "Current play state.", kind = "boolean"),
+        parameter(
+            name = "alias",
+            info = "Alias index.",
+            kind = "number",
+            optional = true
+        )
     )]
-    fn is_play(_: &mlua::Lua, this: &Self, _: ()) -> mlua::Result<bool> {
-        unsafe { Ok(ffi::IsSoundPlaying(this.inner)) }
+    fn is_play(_: &mlua::Lua, this: &Self, alias: Option<usize>) -> mlua::Result<bool> {
+        unsafe {
+            if let Some(alias) = alias
+                && let Some(alias) = this.alias.get(alias)
+            {
+                Ok(ffi::IsSoundPlaying(*alias))
+            } else {
+                Ok(ffi::IsSoundPlaying(this.inner))
+            }
+        }
+    }
+
+    #[method(
+        from = "Sound",
+        info = "Get the alias count.",
+        result(name = "count", info = "Alias count.", kind = "number")
+    )]
+    fn get_alias_count(_: &mlua::Lua, this: &Self, _: ()) -> mlua::Result<usize> {
+        Ok(this.alias.len())
     }
 
     #[method(
         from = "Sound",
         info = "Set the volume of the sound.",
-        parameter(name = "volume", info = "Volume value.", kind = "number")
+        parameter(name = "volume", info = "Volume value.", kind = "number"),
+        parameter(
+            name = "alias",
+            info = "Alias index.",
+            kind = "number",
+            optional = true
+        )
     )]
-    fn set_volume(_: &mlua::Lua, this: &Self, volume: f32) -> mlua::Result<()> {
+    fn set_volume(
+        _: &mlua::Lua,
+        this: &Self,
+        (volume, alias): (f32, Option<usize>),
+    ) -> mlua::Result<()> {
         unsafe {
-            ffi::SetSoundVolume(this.inner, volume);
+            if let Some(alias) = alias
+                && let Some(alias) = this.alias.get(alias)
+            {
+                ffi::SetSoundVolume(*alias, volume);
+            } else {
+                ffi::SetSoundVolume(this.inner, volume);
+            }
             Ok(())
         }
     }
@@ -174,11 +304,27 @@ impl Sound {
     #[method(
         from = "Sound",
         info = "Set the pitch of the sound.",
-        parameter(name = "pitch", info = "Pitch value.", kind = "number")
+        parameter(name = "pitch", info = "Pitch value.", kind = "number"),
+        parameter(
+            name = "alias",
+            info = "Alias index.",
+            kind = "number",
+            optional = true
+        )
     )]
-    fn set_pitch(_: &mlua::Lua, this: &Self, pitch: f32) -> mlua::Result<()> {
+    fn set_pitch(
+        _: &mlua::Lua,
+        this: &Self,
+        (pitch, alias): (f32, Option<usize>),
+    ) -> mlua::Result<()> {
         unsafe {
-            ffi::SetSoundPitch(this.inner, pitch);
+            if let Some(alias) = alias
+                && let Some(alias) = this.alias.get(alias)
+            {
+                ffi::SetSoundPitch(*alias, pitch);
+            } else {
+                ffi::SetSoundPitch(this.inner, pitch);
+            }
             Ok(())
         }
     }
@@ -186,11 +332,23 @@ impl Sound {
     #[method(
         from = "Sound",
         info = "Set the pan of the sound.",
-        parameter(name = "pan", info = "Pan value.", kind = "number")
+        parameter(name = "pan", info = "Pan value.", kind = "number"),
+        parameter(
+            name = "alias",
+            info = "Alias index.",
+            kind = "number",
+            optional = true
+        )
     )]
-    fn set_pan(_: &mlua::Lua, this: &Self, pan: f32) -> mlua::Result<()> {
+    fn set_pan(_: &mlua::Lua, this: &Self, (pan, alias): (f32, Option<usize>)) -> mlua::Result<()> {
         unsafe {
-            ffi::SetSoundPan(this.inner, pan);
+            if let Some(alias) = alias
+                && let Some(alias) = this.alias.get(alias)
+            {
+                ffi::SetSoundPan(*alias, pan);
+            } else {
+                ffi::SetSoundPan(this.inner, pan);
+            }
             Ok(())
         }
     }
@@ -207,13 +365,14 @@ impl Drop for Sound {
 impl mlua::UserData for Sound {
     #[rustfmt::skip]
     fn add_methods<M: mlua::UserDataMethods<Self>>(method: &mut M) {
-        method.add_method("play",       Self::play);
-        method.add_method("stop",       Self::stop);
-        method.add_method("pause",      Self::pause);
-        method.add_method("resume",     Self::resume);
-        method.add_method("is_play",    Self::is_play);
-        method.add_method("set_volume", Self::set_volume);
-        method.add_method("set_pitch",  Self::set_pitch);
-        method.add_method("set_pan",    Self::set_pan);
+        method.add_method("play",            Self::play);
+        method.add_method("stop",            Self::stop);
+        method.add_method("pause",           Self::pause);
+        method.add_method("resume",          Self::resume);
+        method.add_method("is_play",         Self::is_play);
+        method.add_method("get_alias_count", Self::get_alias_count);
+        method.add_method("set_volume",      Self::set_volume);
+        method.add_method("set_pitch",       Self::set_pitch);
+        method.add_method("set_pan",         Self::set_pan);
     }
 }

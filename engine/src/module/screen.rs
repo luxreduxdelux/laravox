@@ -17,6 +17,8 @@ pub fn set_global(lua: &mlua::Lua, global: &mlua::Table) -> anyhow::Result<()> {
     screen.set("wipe",                lua.create_function(self::wipe)?)?;
     screen.set("draw",                lua.create_function(self::draw)?)?;
     screen.set("draw_2D",             lua.create_function(self::draw_2D)?)?;
+    screen.set("draw_2D_begin",             lua.create_function(self::draw_2D_begin)?)?;
+    screen.set("draw_2D_close",             lua.create_function(self::draw_2D_close)?)?;
     screen.set("draw_scissor",        lua.create_function(self::draw_scissor)?)?;
     screen.set("draw_scissor_begin",  lua.create_function(self::draw_scissor_begin)?)?;
     screen.set("draw_scissor_close",  lua.create_function(self::draw_scissor_close)?)?;
@@ -80,6 +82,26 @@ fn draw_2D(lua: &mlua::Lua, (call, camera): (mlua::Function, mlua::Value)) -> ml
         ffi::EndMode2D();
 
         call
+    }
+}
+
+// TO-DO temporary
+fn draw_2D_begin(lua: &mlua::Lua, camera: mlua::Value) -> mlua::Result<()> {
+    unsafe {
+        let camera: Camera2D = lua.from_value(camera)?;
+
+        ffi::BeginMode2D(camera.into());
+
+        Ok(())
+    }
+}
+
+// TO-DO temporary
+fn draw_2D_close(_: &mlua::Lua, _: ()) -> mlua::Result<()> {
+    unsafe {
+        ffi::EndMode2D();
+
+        Ok(())
     }
 }
 
