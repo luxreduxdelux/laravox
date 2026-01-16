@@ -1,4 +1,4 @@
-# Laravox
+# Flakdog
 A 2D game development framework, for Lua.
 
 ## Build
@@ -9,7 +9,7 @@ On Linux (Debian/Ubuntu/Mint):
 
 sudo apt install build-essential clang cmake libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev libwayland-dev libxkbcommon-dev
 
-Run cargo build --release in the root of the Laravox folder.
+Run cargo build --release in the root of the Flakdog folder.
 
 ## License
-Laravox has a BSD-2-Clause-Patent license.
+Flakdog has a BSD-2-Clause-Patent license.
